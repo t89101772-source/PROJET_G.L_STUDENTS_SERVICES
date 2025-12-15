@@ -137,8 +137,8 @@ function sendEmailWithDocument($to_email, $nom, $prenom, $numero_attestation, $n
         // 3. Mots de passe des applications → Créer un nouveau mot de passe
         // 4. Copiez le mot de passe généré (16 caractères)
         
-        $mail->Username = 'da805632@gmail.com'; // REMPLACER par votre email Gmail
-        $mail->Password = 'niqzbihnzjsfkals'; // REMPLACER par votre mot de passe d'application Gmail (16 caractères)
+        $mail->Username = 'votre email'; // REMPLACER par votre email Gmail
+        $mail->Password = 'votre mot de passe d'application Gmail'; // REMPLACER par votre mot de passe d'application Gmail (16 caractères)
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
@@ -151,8 +151,8 @@ function sendEmailWithDocument($to_email, $nom, $prenom, $numero_attestation, $n
         // };
         
         // Expéditeur
-        $mail->setFrom('da805632@gmail.com', 'UnivDocs');
-        $mail->addReplyTo('da805632@gmail.com', 'Support UnivDocs');
+        $mail->setFrom('votre email', 'UnivDocs');
+        $mail->addReplyTo('votre email', 'Support UnivDocs');
         
         // Destinataire
         $mail->addAddress($to_email, $prenom . ' ' . $nom);
