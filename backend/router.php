@@ -13,7 +13,12 @@ header('Access-Control-Allow-Origin: http://localhost:3000');
 header('Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept');
 header('Access-Control-Allow-Credentials: true');
-header('Access-Control-Max-Age: 86400'); // Cache preflight pour 24 heures
+header('Access-Max-Age: 86400'); // Cache preflight pour 24 heures
+
+// Log pour debug PATCH
+if ($_SERVER['REQUEST_METHOD'] === 'PATCH') {
+    error_log("PATCH request - URI: " . ($_SERVER['REQUEST_URI'] ?? 'empty') . ", Method: " . $_SERVER['REQUEST_METHOD']);
+}
 
 // Réactiver le reporting d'erreurs
 error_reporting($old_error_reporting);
@@ -46,7 +51,6 @@ if ($path === '/' || $path === '') {
             'GET /api/demandes/student/{apogee}' => 'Demandes d\'un étudiant',
             'GET /api/reclamations' => 'Liste des réclamations',
             'GET /api/stats' => 'Statistiques',
-            'POST /api/chatbot' => 'Chatbot',
             'GET /verify_document.php?id=XXX' => 'Vérification de document via QR code'
         ]
     ]);
@@ -71,8 +75,12 @@ if (strpos($path, '/api/') === 0 || $path === '/api') {
             break;
             
         case 'demandes':
-            $_SERVER['PATH_INFO'] = '/' . implode('/', array_slice($segments, 1));
+            // Construire le PATH_INFO correctement
+            $remaining_path = implode('/', array_slice($segments, 1));
+            $_SERVER['PATH_INFO'] = $remaining_path ? '/' . $remaining_path : '';
+            error_log("Router - demandes: PATH_INFO = " . $_SERVER['PATH_INFO'] . ", segments = " . json_encode($segments));
             require_once __DIR__ . '/api/demandes.php';
+            // Ne pas faire exit() ici pour laisser demandes.php gérer sa propre sortie
             break;
             
         case 'reclamations':
@@ -84,15 +92,11 @@ if (strpos($path, '/api/') === 0 || $path === '/api') {
             $_SERVER['PATH_INFO'] = '/' . implode('/', array_slice($segments, 1));
             require_once __DIR__ . '/api/stats.php';
             break;
-            
-            case 'chatbot':
-                $_SERVER['PATH_INFO'] = '/' . implode('/', array_slice($segments, 1));
-                require_once __DIR__ . '/api/chatbot.php';
-                break;
 
-            case 'send-email':
+        case 'send-email-document':
+                // Redirigé vers generate-document qui gère aussi l'envoi d'email
                 $_SERVER['PATH_INFO'] = '/' . implode('/', array_slice($segments, 1));
-                require_once __DIR__ . '/api/send_email.php';
+                require_once __DIR__ . '/api/generate_document.php';
                 break;
 
             case 'generate-document':
@@ -103,6 +107,14 @@ if (strpos($path, '/api/') === 0 || $path === '/api') {
             case 'download-document':
                 $_SERVER['PATH_INFO'] = '/' . implode('/', array_slice($segments, 1));
                 require_once __DIR__ . '/api/download_document.php';
+                break;
+
+            case 'niveaux':
+                require_once __DIR__ . '/api/niveaux.php';
+                break;
+
+            case 'annees':
+                require_once __DIR__ . '/api/annees.php';
                 break;
 
             default:

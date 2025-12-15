@@ -86,3 +86,98 @@
   @apply bg-gray-400;
 }
 
+
+/* Animation de particules flottantes */
+@keyframes float-particles {
+  0% {
+    transform: translateY(0) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100vh) translateX(100px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes gradient-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.luxury-bg-animation {
+  background: linear-gradient(-45deg, #f0f9ff, #e0f2fe, #dbeafe, #e0e7ff, #f3e8ff, #fce7f3);
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+/* Effet néon pour les formulaires */
+.input-neon:focus,
+.textarea-neon:focus,
+.select-neon:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 
+    0 0 10px rgba(59, 130, 246, 0.5),
+    0 0 20px rgba(59, 130, 246, 0.3),
+    0 0 30px rgba(59, 130, 246, 0.2),
+    0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.input-neon:not(:placeholder-shown),
+.textarea-neon:not(:placeholder-shown),
+.select-neon:not([value=""]) {
+  border-color: #3b82f6 !important;
+  box-shadow: 
+    0 0 8px rgba(59, 130, 246, 0.4),
+    0 0 15px rgba(59, 130, 246, 0.2),
+    0 0 0 2px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Animation pulse pour le néon */
+@keyframes neon-pulse {
+  0%, 100% {
+    box-shadow: 
+      0 0 10px rgba(59, 130, 246, 0.5),
+      0 0 20px rgba(59, 130, 246, 0.3),
+      0 0 30px rgba(59, 130, 246, 0.2),
+      0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+  50% {
+    box-shadow: 
+      0 0 15px rgba(59, 130, 246, 0.6),
+      0 0 25px rgba(59, 130, 246, 0.4),
+      0 0 35px rgba(59, 130, 246, 0.3),
+      0 0 0 4px rgba(59, 130, 246, 0.15);
+  }
+}
+
+.input-neon:focus {
+  animation: neon-pulse 2s ease-in-out infinite;
+}
+
+/* Gradient radial pour effet de lumière */
+.bg-gradient-radial {
+  background: radial-gradient(circle, var(--tw-gradient-stops));
+}

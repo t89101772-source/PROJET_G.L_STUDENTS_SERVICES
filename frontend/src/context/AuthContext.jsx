@@ -25,13 +25,13 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const login = async (credentials, role) => {
+  const login = async (credentials) => {
     try {
-      const response = await authService.login(credentials, role)
+      const response = await authService.login(credentials)
       if (response.user) {
         const userData = {
           ...response.user,
-          role: role,
+          role: 'admin', // Seul rôle disponible maintenant
           token: response.token
         }
         setUser(userData)

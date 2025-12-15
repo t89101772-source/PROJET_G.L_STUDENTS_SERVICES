@@ -31,110 +31,113 @@ if (!file_exists($autoloadPath)) {
 
 require_once $autoloadPath;
 
-header('Content-Type: application/json; charset=utf-8');
+// Permet d'utiliser ce fichier comme "lib" sans exécuter l'endpoint (pour resend-document, etc.)
+if (!defined('PDF_LIB_ONLY')) {
+    header('Content-Type: application/json; charset=utf-8');
 
-$method = $_SERVER['REQUEST_METHOD'];
+    $method = $_SERVER['REQUEST_METHOD'];
 
-if ($method === 'POST') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $demandeId = $input['demande_id'] ?? null;
-    
-    if (empty($demandeId) || !is_numeric($demandeId)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'ID de demande invalide']);
-        exit;
-    }
-    
-    try {
-        // Récupérer les informations de la demande et de l'étudiant
-        $stmt = $pdo->prepare("
-            SELECT d.*, e.nom, e.prenom, e.email, e.cin, e.apogee_number
-            FROM demande d
-            LEFT JOIN etudiant e ON d.apogee_number = e.apogee_number
-            WHERE d.id = ?
-        ");
-        $stmt->execute([$demandeId]);
-        $demande = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($method === 'POST') {
+        $input = json_decode(file_get_contents('php://input'), true);
         
-        if (!$demande || empty($demande)) {
-            http_response_code(404);
-            echo json_encode(['error' => 'Demande non trouvée']);
-            exit;
-        }
+        $demandeId = $input['demande_id'] ?? null;
         
-        if ($demande['status'] !== 'Acceptée') {
+        if (empty($demandeId) || !is_numeric($demandeId)) {
             http_response_code(400);
-            echo json_encode(['error' => 'La demande doit être acceptée pour générer le document']);
+            echo json_encode(['error' => 'ID de demande invalide']);
             exit;
         }
         
-        // VALIDATION CRITIQUE : Vérifier que l'étudiant a le droit de recevoir ce document
-        $additionalInfo = !empty($demande['additional_info']) 
-            ? json_decode($demande['additional_info'], true) 
-            : [];
-        
-        $validation = validateDocumentRequest(
-            $pdo, 
-            $demande['document_type'], 
-            $demande['apogee_number'], 
-            $additionalInfo
-        );
-        
-        if (!$validation['valid']) {
-            http_response_code(400);
-            echo json_encode([
-                'error' => 'Validation échouée',
-                'message' => $validation['error'],
-                'document_type' => $demande['document_type'],
-                'details' => 'Le document ne peut pas être généré car les conditions ne sont pas remplies.'
-            ]);
-            exit;
-        }
-        
-        // Générer le PDF
-        $pdfPath = generatePDF($demande, $validation['data'] ?? []);
-        
-        // Mettre à jour la demande avec le chemin du document
         try {
-            // Vérifier si la colonne existe, sinon l'ajouter
-            $checkColumn = $pdo->query("SHOW COLUMNS FROM demande LIKE 'document_path'");
-            if ($checkColumn->rowCount() == 0) {
-                // Ajouter la colonne si elle n'existe pas
-                $pdo->exec("ALTER TABLE demande ADD COLUMN document_path VARCHAR(500) NULL");
+            // Récupérer les informations de la demande et de l'étudiant
+            $stmt = $pdo->prepare("
+                SELECT d.*, e.nom, e.prenom, e.email, e.cin, e.apogee_number
+                FROM demande d
+                LEFT JOIN etudiant e ON d.apogee_number = e.apogee_number
+                WHERE d.id = ?
+            ");
+            $stmt->execute([$demandeId]);
+            $demande = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$demande || empty($demande)) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Demande non trouvée']);
+                exit;
             }
             
-            $updateStmt = $pdo->prepare("UPDATE demande SET document_path = ? WHERE id = ?");
-            $updateStmt->execute([$pdfPath, $demandeId]);
-        } catch (PDOException $e) {
-            error_log('Error updating document_path: ' . $e->getMessage());
-            // Continuer même si la mise à jour échoue
+            if ($demande['status'] !== 'Acceptée') {
+                http_response_code(400);
+                echo json_encode(['error' => 'La demande doit être acceptée pour générer le document']);
+                exit;
+            }
+            
+            // VALIDATION CRITIQUE : Vérifier que l'étudiant a le droit de recevoir ce document
+            $additionalInfo = !empty($demande['additional_info']) 
+                ? json_decode($demande['additional_info'], true) 
+                : [];
+            
+            $validation = validateDocumentRequest(
+                $pdo, 
+                $demande['document_type'], 
+                $demande['apogee_number'], 
+                $additionalInfo
+            );
+            
+            if (!$validation['valid']) {
+                http_response_code(400);
+                echo json_encode([
+                    'error' => 'Validation échouée',
+                    'message' => $validation['error'],
+                    'document_type' => $demande['document_type'],
+                    'details' => 'Le document ne peut pas être généré car les conditions ne sont pas remplies.'
+                ]);
+                exit;
+            }
+            
+            // Générer le PDF
+            $pdfPath = generatePDF($demande, $validation['data'] ?? []);
+            
+            // Mettre à jour la demande avec le chemin du document
+            try {
+                // Vérifier si la colonne existe, sinon l'ajouter
+                $checkColumn = $pdo->query("SHOW COLUMNS FROM demande LIKE 'document_path'");
+                if ($checkColumn->rowCount() == 0) {
+                    // Ajouter la colonne si elle n'existe pas
+                    $pdo->exec("ALTER TABLE demande ADD COLUMN document_path VARCHAR(500) NULL");
+                }
+                
+                $updateStmt = $pdo->prepare("UPDATE demande SET document_path = ? WHERE id = ?");
+                $updateStmt->execute([$pdfPath, $demandeId]);
+            } catch (PDOException $e) {
+                error_log('Error updating document_path: ' . $e->getMessage());
+                // Continuer même si la mise à jour échoue
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Document généré avec succès',
+                'document_path' => $pdfPath,
+                'download_url' => '/api/download-document?demande_id=' . $demandeId
+            ]);
+            
+        } catch (Exception $e) {
+            http_response_code(500);
+            error_log('Generate document error: ' . $e->getMessage());
+            echo json_encode([
+                'error' => 'Erreur lors de la génération du document',
+                'message' => $e->getMessage()
+            ]);
         }
-        
-        echo json_encode([
-            'success' => true,
-            'message' => 'Document généré avec succès',
-            'document_path' => $pdfPath,
-            'download_url' => '/api/download-document?demande_id=' . $demandeId
-        ]);
-        
-    } catch (Exception $e) {
-        http_response_code(500);
-        error_log('Generate document error: ' . $e->getMessage());
-        echo json_encode([
-            'error' => 'Erreur lors de la génération du document',
-            'message' => $e->getMessage()
-        ]);
+    } else {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
     }
-} else {
-    http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
 }
 
 /**
  * Génère un PDF pour une demande
  */
-function generatePDF($demande) {
+function generatePDF($demande, $validationData = []) {
     // Créer le dossier documents s'il n'existe pas
     $documentsDir = __DIR__ . '/../documents/attestations';
     if (!is_dir($documentsDir)) {
@@ -156,7 +159,7 @@ function generatePDF($demande) {
     $pdf = new \TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
     
     // Informations du document
-    $pdf->SetCreator('Université Abdelmalek Essaidi');
+    $pdf->SetCreator('École Supérieure d’Ingénierie NovaTech - Université Cité des Sciences');
     $pdf->SetAuthor('Service Administratif');
     $pdf->SetTitle($demande['document_type']);
     $pdf->SetSubject('Attestation Officielle');
@@ -172,19 +175,72 @@ function generatePDF($demande) {
     
     // Ajouter une page
     $pdf->AddPage();
-    
-    // Logo de l'université (si disponible)
-    $logoPath = __DIR__ . '/../assets/logo_uae.png';
-    if (file_exists($logoPath)) {
-        $pdf->Image($logoPath, 20, 15, 30, 0, 'PNG', '', 'T', false, 300, '', false, false, 0, false, false, false);
+
+    // =====================================================
+    // En-tête premium: logo centré + cartouche blanc + bordures dorée et bleue
+    // =====================================================
+    $pageW = $pdf->getPageWidth();
+
+    // Couleurs (pro)
+    $blue = [37, 99, 235];   // #2563eb
+    $gold = [212, 175, 55];  // doré
+
+    // Cartouche logo
+    $boxW = 70;
+    $boxH = 30;
+    $boxX = ($pageW - $boxW) / 2;
+    $boxY = 10;
+
+    // Fond blanc + double bordure (extérieur bleu, intérieur doré)
+    $pdf->SetFillColor(255, 255, 255);
+    $pdf->SetLineWidth(0.6);
+    $pdf->SetDrawColor($blue[0], $blue[1], $blue[2]);
+    if (method_exists($pdf, 'RoundedRect')) {
+        $pdf->RoundedRect($boxX, $boxY, $boxW, $boxH, 3, '1111', 'DF');
+    } else {
+        $pdf->Rect($boxX, $boxY, $boxW, $boxH, 'DF');
     }
+
+    $pdf->SetLineWidth(0.4);
+    $pdf->SetDrawColor($gold[0], $gold[1], $gold[2]);
+    $inset = 1.2;
+    if (method_exists($pdf, 'RoundedRect')) {
+        $pdf->RoundedRect($boxX + $inset, $boxY + $inset, $boxW - 2 * $inset, $boxH - 2 * $inset, 2.4, '1111', 'D');
+    } else {
+        $pdf->Rect($boxX + $inset, $boxY + $inset, $boxW - 2 * $inset, $boxH - 2 * $inset, 'D');
+    }
+
+    // Logo (SVG recommandé) - centré dans la cartouche (fond blanc => lisible)
+    // Utiliser un logo "PDF-safe" (sans gradients/texte) pour éviter les rendus bizarres
+    $logoSvgPath = __DIR__ . '/../assets/logo_novatech_mark.svg';
+    $logoPngFallback = __DIR__ . '/../assets/logo_uae.png';
+    $logoW = 22;
+    $logoH = 22;
+    $logoX = $boxX + ($boxW - $logoW) / 2;
+    $logoY = $boxY + ($boxH - $logoH) / 2;
+    if (file_exists($logoSvgPath) && method_exists($pdf, 'ImageSVG')) {
+        $pdf->ImageSVG($logoSvgPath, $logoX, $logoY, $logoW, $logoH, '', '', 'T', 0, false);
+    } elseif (file_exists($logoPngFallback)) {
+        $pdf->Image($logoPngFallback, $logoX, $logoY, $logoW, 0, 'PNG', '', 'T', false, 300, '', false, false, 0, false, false, false);
+    }
+
+    // Lignes décoratives sous le cartouche
+    $lineY = $boxY + $boxH + 6;
+    $pdf->SetLineWidth(0.7);
+    $pdf->SetDrawColor($gold[0], $gold[1], $gold[2]);
+    $pdf->Line(20, $lineY, 190, $lineY);
+    $pdf->SetLineWidth(0.35);
+    $pdf->SetDrawColor($blue[0], $blue[1], $blue[2]);
+    $pdf->Line(20, $lineY + 1.6, 190, $lineY + 1.6);
     
-    // En-tête avec le nom de l'université
+    // En-tête (texte)
     $pdf->SetFont('helvetica', 'B', 16);
-    $pdf->SetY(20);
-    $pdf->Cell(0, 10, 'UNIVERSITÉ ABDELMALEK ESSAIDI', 0, 1, 'C');
-    $pdf->SetFont('helvetica', '', 12);
-    $pdf->Cell(0, 5, 'Tétouan, Maroc', 0, 1, 'C');
+    $pdf->SetY($lineY + 6);
+    $pdf->Cell(0, 8, 'UNIVERSITÉ CITÉ DES SCIENCES', 0, 1, 'C');
+    $pdf->SetFont('helvetica', '', 10);
+    $pdf->Cell(0, 6, 'École Supérieure d’Ingénierie NovaTech', 0, 1, 'C');
+    $pdf->SetFont('helvetica', '', 11);
+    $pdf->Cell(0, 5, 'Université Cité des Sciences', 0, 1, 'C');
     $pdf->Ln(10);
     
     // Ligne de séparation
@@ -196,39 +252,70 @@ function generatePDF($demande) {
     $pdf->SetFont('helvetica', 'B', 14);
     $pdf->Cell(0, 10, strtoupper($demande['document_type']), 0, 1, 'C');
     $pdf->Ln(10);
-    
-    // Contenu principal
-    $pdf->SetFont('helvetica', '', 11);
-    $pdf->SetX(30);
-    $pdf->MultiCell(0, 6, 'Je soussigné(e), le Responsable du Service Administratif de l\'Université Abdelmalek Essaidi, certifie que :', 0, 'L');
-    $pdf->Ln(10);
-    
-    // Informations de l'étudiant
-    $pdf->SetFont('helvetica', 'B', 11);
-    $pdf->SetX(40);
-    $pdf->Cell(60, 7, 'Nom et Prénom :', 0, 0, 'L');
-    $pdf->SetFont('helvetica', '', 11);
-    $pdf->Cell(0, 7, $demande['nom'] . ' ' . $demande['prenom'], 0, 1, 'L');
-    
-    $pdf->SetFont('helvetica', 'B', 11);
-    $pdf->SetX(40);
-    $pdf->Cell(60, 7, 'Numéro Apogée :', 0, 0, 'L');
-    $pdf->SetFont('helvetica', '', 11);
-    $pdf->Cell(0, 7, $demande['apogee_number'], 0, 1, 'L');
-    
-    $pdf->SetFont('helvetica', 'B', 11);
-    $pdf->SetX(40);
-    $pdf->Cell(60, 7, 'CIN :', 0, 0, 'L');
-    $pdf->SetFont('helvetica', '', 11);
-    $pdf->Cell(0, 7, $demande['cin'], 0, 1, 'L');
-    
-    $pdf->SetFont('helvetica', 'B', 11);
-    $pdf->SetX(40);
-    $pdf->Cell(60, 7, 'Email :', 0, 0, 'L');
-    $pdf->SetFont('helvetica', '', 11);
-    $pdf->Cell(0, 7, $demande['email'], 0, 1, 'L');
-    
-    $pdf->Ln(10);
+
+    // Pour la convention de stage: document "convention" (pas une attestation "certifie que")
+    if ($demande['document_type'] !== 'Convention de stage') {
+        // Contenu principal
+        $pdf->SetFont('helvetica', '', 11);
+        $pdf->SetX(30);
+        $pdf->MultiCell(0, 6, 'Je soussigné(e), le Responsable du Service Administratif de l\'École Supérieure d’Ingénierie NovaTech - Université Cité des Sciences, certifie que :', 0, 'L');
+        $pdf->Ln(10);
+
+        // Informations de l'étudiant
+        $pdf->SetFont('helvetica', 'B', 11);
+        $pdf->SetX(40);
+        $pdf->Cell(60, 7, 'Nom et Prénom :', 0, 0, 'L');
+        $pdf->SetFont('helvetica', '', 11);
+        $pdf->Cell(0, 7, $demande['nom'] . ' ' . $demande['prenom'], 0, 1, 'L');
+
+        $pdf->SetFont('helvetica', 'B', 11);
+        $pdf->SetX(40);
+        $pdf->Cell(60, 7, 'Numéro Apogée :', 0, 0, 'L');
+        $pdf->SetFont('helvetica', '', 11);
+        $pdf->Cell(0, 7, $demande['apogee_number'], 0, 1, 'L');
+
+        $pdf->SetFont('helvetica', 'B', 11);
+        $pdf->SetX(40);
+        $pdf->Cell(60, 7, 'CIN :', 0, 0, 'L');
+        $pdf->SetFont('helvetica', '', 11);
+        $pdf->Cell(0, 7, $demande['cin'], 0, 1, 'L');
+
+        $pdf->SetFont('helvetica', 'B', 11);
+        $pdf->SetX(40);
+        $pdf->Cell(60, 7, 'Email :', 0, 0, 'L');
+        $pdf->SetFont('helvetica', '', 11);
+        $pdf->Cell(0, 7, $demande['email'], 0, 1, 'L');
+
+        // Pour l'attestation de scolarité, ajouter le niveau dans les informations
+        if ($demande['document_type'] === 'Attestation de scolarité') {
+            $additionalInfo = !empty($demande['additional_info']) ? json_decode($demande['additional_info'], true) : [];
+            $annee = $additionalInfo['annee_universitaire'] ?? date('Y') . '-' . (date('Y') + 1);
+            
+            // Chercher l'inscription réelle dans la BDD pour obtenir le niveau
+            global $pdo;
+            $stmt = $pdo->prepare("
+                SELECT * FROM inscription 
+                WHERE apogee_number = ? AND annee_universitaire = ?
+                ORDER BY date_inscription DESC LIMIT 1
+            ");
+            $stmt->execute([$demande['apogee_number'], $annee]);
+            $inscriptionReelle = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($inscriptionReelle && !empty($inscriptionReelle['niveau'])) {
+                $pdf->SetFont('helvetica', 'B', 11);
+                $pdf->SetX(40);
+                $pdf->Cell(60, 7, 'Niveau :', 0, 0, 'L');
+                $pdf->SetFont('helvetica', '', 11);
+                $niveauDisplay = $inscriptionReelle['niveau'];
+                if (!empty($inscriptionReelle['filiere']) && $inscriptionReelle['filiere'] !== 'Cycle Préparatoire') {
+                    $niveauDisplay .= ' - ' . $inscriptionReelle['filiere'];
+                }
+                $pdf->Cell(0, 7, $niveauDisplay, 0, 1, 'L');
+            }
+        }
+
+        $pdf->Ln(10);
+    }
     
     // Contenu spécifique selon le type de document
     $pdf->SetFont('helvetica', '', 11);
@@ -259,135 +346,227 @@ function generatePDF($demande) {
                 $niveau = $inscriptionReelle['niveau'];
                 $filiere = $inscriptionReelle['filiere'];
                 $statut = $inscriptionReelle['statut'];
-                $pdf->MultiCell(0, 6, "est régulièrement inscrit(e) à l'Université Abdelmalek Essaidi pour l'année universitaire $annee au niveau $niveau en $filiere (Statut: $statut).", 0, 'L');
+                // Mentionner l'année exacte d'inscription
+                if ($filiere) {
+                    $pdf->MultiCell(0, 6, "est régulièrement inscrit(e) à l'École Supérieure d'Ingénierie NovaTech - Université Cité des Sciences pour l'année universitaire $annee au niveau $niveau en $filiere (Statut: $statut).", 0, 'L');
+                } else {
+                    // Cycle préparatoire (pas de filière)
+                    $pdf->MultiCell(0, 6, "est régulièrement inscrit(e) à l'École Supérieure d'Ingénierie NovaTech - Université Cité des Sciences pour l'année universitaire $annee au niveau $niveau (Statut: $statut).", 0, 'L');
+                }
             } else {
-                $pdf->MultiCell(0, 6, "est régulièrement inscrit(e) à l'Université Abdelmalek Essaidi pour l'année universitaire $annee.", 0, 'L');
+                $pdf->MultiCell(0, 6, "est régulièrement inscrit(e) à l'École Supérieure d'Ingénierie NovaTech - Université Cité des Sciences pour l'année universitaire $annee.", 0, 'L');
             }
             break;
             
         case 'Attestation de réussite':
             // Récupérer les données RÉELLES depuis la base de données
-            $annee = $additionalInfo['annee_universitaire'] ?? null;
-            $niveau = $additionalInfo['niveau'] ?? null;
+            $niveauDemande = $additionalInfo['niveau'] ?? null;
             
-            if ($annee && $niveau) {
-                // Chercher le résultat réel dans la BDD
+            // On utilise la validation (dernière année "Réussi" pour ce niveau)
+            $resultatReel = $resultat ?: null;
+            if (!$resultatReel) {
                 global $pdo;
-                $stmt = $pdo->prepare("
-                    SELECT * FROM resultat_annee 
-                    WHERE apogee_number = ? AND annee_universitaire = ? AND niveau = ?
-                ");
-                $stmt->execute([$demande['apogee_number'], $annee, $niveau]);
-                $resultatReel = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!empty($niveauDemande)) {
+                    $stmt = $pdo->prepare("
+                        SELECT ra.*
+                        FROM resultat_annee ra
+                        WHERE ra.apogee_number = ? AND ra.niveau = ? AND ra.statut = 'Réussi'
+                        ORDER BY ra.annee_universitaire DESC, ra.id DESC
+                        LIMIT 1
+                    ");
+                    $stmt->execute([$demande['apogee_number'], $niveauDemande]);
+                    $resultatReel = $stmt->fetch(PDO::FETCH_ASSOC);
+                }
+            }
                 
                 if ($resultatReel && $resultatReel['statut'] === 'Réussi') {
+                    $annee = $resultatReel['annee_universitaire'] ?? '—';
+                    $niveau = $resultatReel['niveau'] ?? 'N/A';
+                    $filiere = $resultatReel['filiere'] ?? 'N/A';
                     $moyenne = number_format($resultatReel['moyenne_generale'], 2);
                     $mention = $resultatReel['mention'] ?? '';
-                    $mentionText = $mention ? " avec la mention \"$mention\"" : '';
-                    $pdf->MultiCell(0, 6, "a réussi avec succès ses études à l'Université Abdelmalek Essaidi pour l'année universitaire $annee au niveau $niveau avec une moyenne générale de $moyenne/20$mentionText.", 0, 'L');
+                    
+                    // Texte détaillé avec toutes les informations
+                    $pdf->SetFont('helvetica', '', 11);
+                    $pdf->SetX(30);
+                    $pdf->MultiCell(0, 6, "a validé avec succès le niveau $niveau pour l'année universitaire $annee au sein de l'École Supérieure d’Ingénierie NovaTech - Université Cité des Sciences.", 0, 'L');
+                    $pdf->Ln(5);
+                    
+                    // Détails supplémentaires
+                    $pdf->SetFont('helvetica', 'B', 11);
+                    $pdf->SetX(40);
+                    $pdf->Cell(70, 7, 'Niveau :', 0, 0, 'L');
+                    $pdf->SetFont('helvetica', '', 11);
+                    $pdf->Cell(0, 7, $niveau, 0, 1, 'L');
+                    
+                    if ($filiere !== 'N/A') {
+                        $pdf->SetFont('helvetica', 'B', 11);
+                        $pdf->SetX(40);
+                        $pdf->Cell(70, 7, 'Filière :', 0, 0, 'L');
+                        $pdf->SetFont('helvetica', '', 11);
+                        $pdf->Cell(0, 7, $filiere, 0, 1, 'L');
+                    }
+                    
+                    $pdf->SetFont('helvetica', 'B', 11);
+                    $pdf->SetX(40);
+                    $pdf->Cell(70, 7, 'Moyenne générale :', 0, 0, 'L');
+                    $pdf->SetFont('helvetica', '', 11);
+                    $pdf->Cell(0, 7, $moyenne . '/20', 0, 1, 'L');
+                    
+                    if ($mention) {
+                        $pdf->SetFont('helvetica', 'B', 11);
+                        $pdf->SetX(40);
+                        $pdf->Cell(70, 7, 'Mention :', 0, 0, 'L');
+                        $pdf->SetFont('helvetica', '', 11);
+                        $pdf->Cell(0, 7, $mention, 0, 1, 'L');
+                    }
                 } else {
-                    $pdf->MultiCell(0, 6, "a réussi ses études à l'Université Abdelmalek Essaidi pour l'année universitaire $annee au niveau $niveau.", 0, 'L');
+                    $pdf->MultiCell(0, 6, "Aucun résultat de réussite n'a été trouvé pour ce niveau. Veuillez vérifier les résultats en base de données.", 0, 'L');
                 }
-            } else {
-                $pdf->MultiCell(0, 6, "a réussi avec succès ses études à l'Université Abdelmalek Essaidi.", 0, 'L');
-            }
             break;
             
         case 'Relevé de notes':
-            // Récupérer les notes RÉELLES depuis la base de données
-            $annee = $additionalInfo['annee_universitaire'] ?? null;
-            $semestre = $additionalInfo['semestre'] ?? 'Tous';
-            
-            if ($annee) {
-                // Chercher les notes réelles dans la BDD
-                global $pdo;
-                if ($semestre && $semestre !== 'Tous') {
-                    $stmt = $pdo->prepare("
-                        SELECT * FROM note 
-                        WHERE apogee_number = ? AND annee_universitaire = ? AND semestre = ?
-                        ORDER BY semestre, code_module
-                    ");
-                    $stmt->execute([$demande['apogee_number'], $annee, $semestre]);
-                } else {
-                    $stmt = $pdo->prepare("
-                        SELECT * FROM note 
-                        WHERE apogee_number = ? AND annee_universitaire = ?
-                        ORDER BY semestre, code_module
-                    ");
-                    $stmt->execute([$demande['apogee_number'], $annee]);
-                }
-                $notes = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                
-                if (!empty($notes)) {
-                    $pdf->Ln(5);
-                    $pdf->SetFont('helvetica', 'B', 11);
-                    $pdf->Cell(0, 7, "Relevé de notes - Année universitaire $annee" . ($semestre !== 'Tous' ? " - Semestre $semestre" : ""), 0, 1, 'L');
-                    $pdf->Ln(3);
-                    
-                    // Tableau des notes
-                    $pdf->SetFont('helvetica', 'B', 9);
-                    $pdf->SetFillColor(240, 240, 240);
-                    $pdf->Cell(20, 7, 'Code', 1, 0, 'C', true);
-                    $pdf->Cell(80, 7, 'Module', 1, 0, 'C', true);
-                    $pdf->Cell(15, 7, 'Note', 1, 0, 'C', true);
-                    $pdf->Cell(20, 7, 'Coef.', 1, 0, 'C', true);
-                    $pdf->Cell(25, 7, 'Mention', 1, 0, 'C', true);
-                    $pdf->Cell(20, 7, 'Sem.', 1, 1, 'C', true);
-                    
-                    $pdf->SetFont('helvetica', '', 9);
-                    $totalPoints = 0;
-                    $totalCoeff = 0;
-                    $notesParSemestre = ['S1' => ['points' => 0, 'coeff' => 0], 'S2' => ['points' => 0, 'coeff' => 0]];
-                    
-                    foreach ($notes as $note) {
-                        $points = $note['note'] * $note['coefficient'];
-                        $totalPoints += $points;
-                        $totalCoeff += $note['coefficient'];
-                        
-                        if (isset($notesParSemestre[$note['semestre']])) {
-                            $notesParSemestre[$note['semestre']]['points'] += $points;
-                            $notesParSemestre[$note['semestre']]['coeff'] += $note['coefficient'];
-                        }
-                        
-                        $pdf->Cell(20, 6, $note['code_module'], 1, 0, 'C');
-                        $pdf->Cell(80, 6, substr($note['nom_module'], 0, 35), 1, 0, 'L');
-                        $pdf->Cell(15, 6, number_format($note['note'], 2), 1, 0, 'C');
-                        $pdf->Cell(20, 6, number_format($note['coefficient'], 2), 1, 0, 'C');
-                        $pdf->Cell(25, 6, $note['mention'] ?? '-', 1, 0, 'C');
-                        $pdf->Cell(20, 6, $note['semestre'], 1, 1, 'C');
-                    }
-                    
-                    // Moyennes
-                    $pdf->Ln(3);
-                    $pdf->SetFont('helvetica', 'B', 10);
-                    if ($totalCoeff > 0) {
-                        $moyenneGenerale = $totalPoints / $totalCoeff;
-                        $pdf->Cell(0, 7, "Moyenne générale: " . number_format($moyenneGenerale, 2) . "/20", 0, 1, 'R');
-                    }
-                    
-                    // Moyennes par semestre
-                    foreach ($notesParSemestre as $sem => $data) {
-                        if ($data['coeff'] > 0) {
-                            $moyenneSem = $data['points'] / $data['coeff'];
-                            $pdf->Cell(0, 6, "Moyenne $sem: " . number_format($moyenneSem, 2) . "/20", 0, 1, 'R');
-                        }
-                    }
-                    
-                    // Résultat (validé ou non)
-                    $pdf->Ln(3);
-                    $pdf->SetFont('helvetica', 'B', 11);
-                    if ($annee && isset($resultat)) {
-                        $statutResultat = $resultat['statut'] ?? 'En cours';
-                        $couleur = ($statutResultat === 'Réussi') ? [0, 128, 0] : [255, 0, 0];
-                        $pdf->SetTextColor($couleur[0], $couleur[1], $couleur[2]);
-                        $pdf->Cell(0, 7, "Résultat: " . strtoupper($statutResultat), 0, 1, 'L');
-                        $pdf->SetTextColor(0, 0, 0);
-                    }
-                } else {
-                    $pdf->MultiCell(0, 6, "Aucune note trouvée pour l'année universitaire $annee.", 0, 'L');
-                }
+            // Relevé (options):
+            // - niveau_cible = Tous => S1 jusqu'au dernier semestre validé
+            // - niveau_cible = un niveau => semestres validés de ce niveau
+            global $pdo;
+
+            $niveauCible = $validationData['niveau_cible'] ?? ($additionalInfo['niveau_cible'] ?? 'Tous');
+            $included = $validationData['included_semestres'] ?? null;
+
+            if (!is_array($included) || empty($included)) {
+                // Fallback minimal si validationData non transmis
+                $stmt = $pdo->prepare("
+                    SELECT MAX(n.numero_semestre) AS max_sem
+                    FROM resultat_semestre rs
+                    INNER JOIN niveau n ON n.id = rs.niveau_id
+                    WHERE rs.apogee_number = ?
+                      AND rs.statut = 'Validé'
+                ");
+                $stmt->execute([$demande['apogee_number']]);
+                $maxValidated = (int)($stmt->fetchColumn() ?: 0);
+                if ($maxValidated <= 0) $maxValidated = 10;
+                $included = range(1, $maxValidated);
+                $niveauCible = 'Tous';
+            }
+
+            $placeholders = implode(',', array_fill(0, count($included), '?'));
+            $params = array_merge([$demande['apogee_number']], $included);
+
+            // Notes (toutes années confondues) sur les semestres inclus
+            $stmt = $pdo->prepare("
+                SELECT nt.*, n.numero_semestre
+                FROM note nt
+                LEFT JOIN niveau n ON n.id = nt.niveau_id
+                WHERE nt.apogee_number = ?
+                  AND COALESCE(n.numero_semestre, CAST(SUBSTRING(nt.semestre, 2) AS UNSIGNED)) IN ($placeholders)
+                ORDER BY COALESCE(n.numero_semestre, CAST(SUBSTRING(nt.semestre, 2) AS UNSIGNED)) ASC, nt.code_module ASC
+            ");
+            $stmt->execute($params);
+            $notes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (empty($notes)) {
+                $pdf->MultiCell(0, 6, "Aucune note trouvée pour cet étudiant. Impossible de générer un relevé de notes.", 0, 'L');
+                break;
+            }
+
+            // Résultats par semestre pour afficher les moyennes semestrielles si disponibles
+            $stmt = $pdo->prepare("
+                SELECT rs.niveau_id, rs.annee_universitaire, rs.moyenne_semestre, rs.statut, rs.mention, n.numero_semestre
+                FROM resultat_semestre rs
+                INNER JOIN niveau n ON n.id = rs.niveau_id
+                WHERE rs.apogee_number = ?
+                  AND n.numero_semestre IN ($placeholders)
+                ORDER BY n.numero_semestre ASC
+            ");
+            $stmt->execute($params);
+            $semResults = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $semMap = [];
+            foreach ($semResults as $sr) {
+                $semMap[(int)$sr['numero_semestre']] = $sr;
+            }
+
+            $pdf->Ln(5);
+            $pdf->SetFont('helvetica', 'B', 11);
+            $minSem = min($included);
+            $maxSem = max($included);
+            if ($niveauCible === 'Tous') {
+                $pdf->Cell(0, 7, "Relevé de notes (complet) - S{$minSem} à S{$maxSem}", 0, 1, 'L');
             } else {
-                $pdf->MultiCell(0, 6, "Relevé de notes pour l'année universitaire demandée.", 0, 'L');
+                $pdf->Cell(0, 7, "Relevé de notes - Niveau {$niveauCible} (semestres validés)", 0, 1, 'L');
+            }
+            $pdf->Ln(2);
+            $pdf->SetFont('helvetica', '', 10);
+            $pdf->MultiCell(0, 6, "Ce relevé présente les notes des semestres validés disponibles en base de données pour l'étudiant.", 0, 'L');
+            $pdf->Ln(2);
+
+            // Groupement par semestre
+            $bySem = [];
+            foreach ($notes as $n) {
+                $semNum = (int)($n['numero_semestre'] ?: (int)substr($n['semestre'], 1));
+                if (!isset($bySem[$semNum])) $bySem[$semNum] = [];
+                $bySem[$semNum][] = $n;
+            }
+            ksort($bySem);
+
+            $overallPoints = 0.0;
+            $overallCoeff = 0.0;
+
+            foreach ($bySem as $semNum => $rows) {
+                $semLabel = 'S' . $semNum;
+                $year = $rows[0]['annee_universitaire'] ?? '';
+
+                $pdf->Ln(3);
+                $pdf->SetFont('helvetica', 'B', 10);
+                $title = "Semestre {$semLabel}" . ($year ? " - {$year}" : "");
+                $pdf->Cell(0, 6, $title, 0, 1, 'L');
+
+                if (isset($semMap[$semNum])) {
+                    $sr = $semMap[$semNum];
+                    $pdf->SetFont('helvetica', '', 9);
+                    $pdf->Cell(0, 5, "Moyenne: " . number_format((float)$sr['moyenne_semestre'], 2) . "/20  |  Statut: {$sr['statut']}" . ($sr['mention'] ? "  |  Mention: {$sr['mention']}" : ""), 0, 1, 'L');
+                }
+
+                // Tableau
+                $pdf->SetFont('helvetica', 'B', 9);
+                $pdf->SetFillColor(240, 240, 240);
+                $pdf->Cell(22, 7, 'Code', 1, 0, 'C', true);
+                $pdf->Cell(88, 7, 'Module', 1, 0, 'C', true);
+                $pdf->Cell(14, 7, 'Note', 1, 0, 'C', true);
+                $pdf->Cell(14, 7, 'Coef.', 1, 0, 'C', true);
+                $pdf->Cell(28, 7, 'Mention', 1, 1, 'C', true);
+
+                $pdf->SetFont('helvetica', '', 9);
+                $semPoints = 0.0;
+                $semCoeff = 0.0;
+                foreach ($rows as $r) {
+                    $coef = (float)$r['coefficient'];
+                    $noteVal = (float)$r['note'];
+                    $points = $noteVal * $coef;
+                    $semPoints += $points;
+                    $semCoeff += $coef;
+                    $overallPoints += $points;
+                    $overallCoeff += $coef;
+
+                    $pdf->Cell(22, 6, $r['code_module'], 1, 0, 'C');
+                    $pdf->Cell(88, 6, mb_substr($r['nom_module'], 0, 42), 1, 0, 'L');
+                    $pdf->Cell(14, 6, number_format($noteVal, 2), 1, 0, 'C');
+                    $pdf->Cell(14, 6, number_format($coef, 2), 1, 0, 'C');
+                    $pdf->Cell(28, 6, $r['mention'] ?? '-', 1, 1, 'C');
+                }
+
+                if ($semCoeff > 0) {
+                    $pdf->SetFont('helvetica', 'B', 9);
+                    $pdf->Cell(110, 6, "Moyenne {$semLabel}", 1, 0, 'R', true);
+                    $pdf->Cell(56, 6, number_format($semPoints / $semCoeff, 2) . "/20", 1, 1, 'C', true);
+                }
+            }
+
+            // Afficher la moyenne globale seulement si ce n'est pas un relevé complet (Tous)
+            if ($overallCoeff > 0 && $niveauCible !== 'Tous') {
+                $pdf->Ln(4);
+                $pdf->SetFont('helvetica', 'B', 10);
+                $pdf->Cell(0, 7, "Moyenne globale (S1 à S{$maxSem}) : " . number_format($overallPoints / $overallCoeff, 2) . "/20", 0, 1, 'R');
             }
             break;
             
@@ -395,88 +574,87 @@ function generatePDF($demande) {
             // Récupérer les données RÉELLES depuis la base de données
             global $pdo;
             
-            // Récupérer l'inscription pour déterminer le type de stage (PFA ou PFE)
-            $currentYear = date('Y');
-            $anneeCourante = $currentYear . '-' . ($currentYear + 1);
-            $anneePrecedente = ($currentYear - 1) . '-' . $currentYear;
+            // Utiliser le type de stage choisi par l'étudiant
+            $typeStageChoisi = $additionalInfo['type_stage'] ?? null;
             
-            $stmtInscription = $pdo->prepare("
-                SELECT niveau, filiere, annee_universitaire 
-                FROM inscription 
-                WHERE apogee_number = ? 
-                AND (annee_universitaire = ? OR annee_universitaire = ?)
-                AND niveau IN ('2A', '3A')
-                AND statut IN ('Inscrit', 'Réinscrit', 'Diplômé')
-                ORDER BY annee_universitaire DESC, niveau DESC
-                LIMIT 1
-            ");
-            $stmtInscription->execute([$demande['apogee_number'], $anneeCourante, $anneePrecedente]);
-            $inscription = $stmtInscription->fetch(PDO::FETCH_ASSOC);
-            
-            $typeStage = '';
-            if ($inscription) {
-                $typeStage = $inscription['niveau'] === '2A' ? 'PFA (Projet de Fin d\'Année)' : 'PFE (Projet de Fin d\'Études)';
+            if ($typeStageChoisi === 'PFA') {
+                $typeStage = 'PFA (Projet de Fin d\'Année)';
+            } elseif ($typeStageChoisi === 'PFE') {
+                $typeStage = 'PFE (Projet de Fin d\'Études)';
+            } else {
+                // Fallback : déterminer automatiquement si non spécifié
+                $typeStage = 'Stage';
             }
             
             $nomEntreprise = $additionalInfo['nom_entreprise'] ?? null;
             
             if ($nomEntreprise) {
-                // Chercher le stage réel dans la BDD
-                $stmt = $pdo->prepare("
-                    SELECT * FROM stage 
-                    WHERE apogee_number = ? 
-                    AND (annee_universitaire = ? OR annee_universitaire = ?)
-                    AND nom_entreprise = ?
-                    AND statut IN ('Approuvé', 'En cours', 'Terminé')
-                    ORDER BY date_debut DESC LIMIT 1
-                ");
-                $stmt->execute([$demande['apogee_number'], $anneeCourante, $anneePrecedente, $nomEntreprise]);
-                $stageReel = $stmt->fetch(PDO::FETCH_ASSOC);
+                // Fonction pour générer le texte professionnel de convention de stage
+                $generateConventionText = function($pdf, $demande, $entreprise, $adresseEntreprise, $typeStage, $duree, $encadrant) {
+                    $pdf->Ln(2);
+                    $studentName = trim(($demande['prenom'] ?? '') . ' ' . ($demande['nom'] ?? ''));
+
+                    $pdf->SetFont('helvetica', '', 11);
+                    $pdf->SetX(30);
+                    $pdf->MultiCell(0, 6, "La présente convention définit le cadre d'accueil et de réalisation d'un stage au bénéfice du Stagiaire {$studentName}, inscrit(e) à l'École Supérieure d’Ingénierie NovaTech - Université Cité des Sciences.", 0, 'L');
+
+                    $pdf->Ln(4);
+                    $pdf->SetFont('helvetica', 'B', 11);
+                    $pdf->SetX(30);
+                    $pdf->Cell(0, 7, 'Parties', 0, 1, 'L');
+                    $pdf->SetFont('helvetica', '', 11);
+                    $pdf->SetX(30);
+                    $pdf->MultiCell(0, 6, "1) L'École Supérieure d’Ingénierie NovaTech, ci-après « l'École ».\n2) L'entreprise {$entreprise}, sise à {$adresseEntreprise}, ci-après « l'Entreprise ».\n3) Le Stagiaire {$studentName} (Apogée: {$demande['apogee_number']}, CIN: {$demande['cin']}).", 0, 'L');
+
+                    $pdf->Ln(4);
+                    $pdf->SetFont('helvetica', 'B', 11);
+                    $pdf->SetX(30);
+                    $pdf->Cell(0, 7, 'Article 1 - Objet', 0, 1, 'L');
+                    $pdf->SetFont('helvetica', '', 11);
+                    $pdf->SetX(30);
+                    $pdf->MultiCell(0, 6, "L'Entreprise accueille le Stagiaire dans le cadre d'un {$typeStage}. Le stage a pour objectif de permettre au Stagiaire d'appliquer ses acquis, de développer des compétences professionnelles et de découvrir l'environnement de travail.", 0, 'L');
+
+                    $pdf->Ln(3);
+                    $pdf->SetFont('helvetica', 'B', 11);
+                    $pdf->SetX(30);
+                    $pdf->Cell(0, 7, 'Article 2 - Durée et organisation', 0, 1, 'L');
+                    $pdf->SetFont('helvetica', '', 11);
+                    $pdf->SetX(30);
+                    $pdf->MultiCell(0, 6, "Durée indicative: {$duree}.\nLes modalités pratiques (planning, lieu, missions, outils) sont définies par l'Entreprise, en concertation avec l'École, conformément au règlement interne et aux règles de sécurité.", 0, 'L');
+
+                    $pdf->Ln(3);
+                    $pdf->SetFont('helvetica', 'B', 11);
+                    $pdf->SetX(30);
+                    $pdf->Cell(0, 7, 'Article 3 - Encadrement et suivi', 0, 1, 'L');
+                    $pdf->SetFont('helvetica', '', 11);
+                    $pdf->SetX(30);
+                    $encTxt = ($encadrant && $encadrant !== 'Non spécifié') ? $encadrant : "un encadrant désigné par l'Entreprise";
+                    $pdf->MultiCell(0, 6, "Le Stagiaire est encadré par {$encTxt}. L'École peut désigner un référent pédagogique et assurer le suivi du stage selon les procédures internes.", 0, 'L');
+
+                    $pdf->Ln(3);
+                    $pdf->SetFont('helvetica', 'B', 11);
+                    $pdf->SetX(30);
+                    $pdf->Cell(0, 7, 'Article 4 - Confidentialité et conduite', 0, 1, 'L');
+                    $pdf->SetFont('helvetica', '', 11);
+                    $pdf->SetX(30);
+                    $pdf->MultiCell(0, 6, "Le Stagiaire s'engage à respecter la confidentialité des informations et documents auxquels il/elle accède, ainsi que les règles de discipline, d'éthique et de sécurité de l'Entreprise.", 0, 'L');
+
+                    $pdf->Ln(3);
+                    $pdf->SetFont('helvetica', 'B', 11);
+                    $pdf->SetX(30);
+                    $pdf->Cell(0, 7, 'Article 5 - Dispositions finales', 0, 1, 'L');
+                    $pdf->SetFont('helvetica', '', 11);
+                    $pdf->SetX(30);
+                    $pdf->MultiCell(0, 6, "La présente convention atteste uniquement de l'accord d'accueil. Toute clause spécifique (assurance, gratification, propriété intellectuelle) peut être précisée par l'Entreprise selon sa politique interne et la réglementation en vigueur.", 0, 'L');
+                };
                 
-                if ($stageReel) {
-                    $entreprise = $stageReel['nom_entreprise'];
-                    $adresse = $stageReel['adresse_entreprise'] ?? 'Non spécifiée';
-                    $duree = $stageReel['duree_semaines'] . ' semaines';
-                    $dateDebut = date('d/m/Y', strtotime($stageReel['date_debut']));
-                    $dateFin = date('d/m/Y', strtotime($stageReel['date_fin']));
-                    $sujet = $stageReel['sujet_stage'] ?? 'Non spécifié';
-                    $tuteurEntreprise = $stageReel['tuteur_entreprise'] ?? 'Non spécifié';
-                    $tuteurUniversitaire = $stageReel['tuteur_universitaire'] ?? 'Non spécifié';
-                    
-                    if ($typeStage) {
-                        $pdf->MultiCell(0, 6, "demande une convention de stage de type $typeStage au sein de l'entreprise : $entreprise située à $adresse pour une durée de $duree du $dateDebut au $dateFin.", 0, 'L');
-                    } else {
-                        $pdf->MultiCell(0, 6, "demande une convention de stage au sein de l'entreprise : $entreprise située à $adresse pour une durée de $duree du $dateDebut au $dateFin.", 0, 'L');
-                    }
-                    
-                    if ($sujet !== 'Non spécifié') {
-                        $pdf->Ln(3);
-                        $pdf->MultiCell(0, 6, "Sujet du stage : $sujet", 0, 'L');
-                    }
-                    
-                    if ($tuteurEntreprise !== 'Non spécifié' || $tuteurUniversitaire !== 'Non spécifié') {
-                        $pdf->Ln(3);
-                        if ($tuteurEntreprise !== 'Non spécifié') {
-                            $pdf->MultiCell(0, 6, "Tuteur entreprise : $tuteurEntreprise", 0, 'L');
-                        }
-                        if ($tuteurUniversitaire !== 'Non spécifié') {
-                            $pdf->MultiCell(0, 6, "Tuteur universitaire : $tuteurUniversitaire", 0, 'L');
-                        }
-                    }
-                } else {
-                    // Utiliser les données du formulaire si le stage n'est pas encore en BDD
-                    $entreprise = $additionalInfo['nom_entreprise'] ?? 'N/A';
-                    $adresse = $additionalInfo['adresse_entreprise'] ?? 'N/A';
-                    $duree = $additionalInfo['duree_stage'] ?? 'N/A';
-                    $dateDebut = isset($additionalInfo['date_debut']) ? date('d/m/Y', strtotime($additionalInfo['date_debut'])) : 'N/A';
-                    $dateFin = isset($additionalInfo['date_fin']) ? date('d/m/Y', strtotime($additionalInfo['date_fin'])) : 'N/A';
-                    
-                    if ($typeStage) {
-                        $pdf->MultiCell(0, 6, "demande une convention de stage de type $typeStage au sein de l'entreprise : $entreprise située à $adresse pour une durée de $duree du $dateDebut au $dateFin.", 0, 'L');
-                    } else {
-                        $pdf->MultiCell(0, 6, "demande une convention de stage au sein de l'entreprise : $entreprise située à $adresse pour une durée de $duree du $dateDebut au $dateFin.", 0, 'L');
-                    }
-                }
+                // Utiliser les données du formulaire
+                $entreprise = $additionalInfo['nom_entreprise'] ?? 'N/A';
+                $adresseEntreprise = $additionalInfo['adresse_entreprise'] ?? 'N/A';
+                $duree = $additionalInfo['duree_stage'] ?? 'N/A';
+                $encadrant = $additionalInfo['encadrant'] ?? 'Non spécifié';
+                
+                $generateConventionText($pdf, $demande, $entreprise, $adresseEntreprise, $typeStage, $duree, $encadrant);
             } else {
                 $pdf->MultiCell(0, 6, "demande une convention de stage" . ($typeStage ? " de type $typeStage" : "") . ".", 0, 'L');
             }
@@ -494,7 +672,7 @@ function generatePDF($demande) {
     $pdf->SetFont('helvetica', '', 11);
     $pdf->SetX(30);
     $date = date('d/m/Y');
-    $pdf->Cell(0, 7, "Fait à Tétouan, le $date", 0, 1, 'L');
+    $pdf->Cell(0, 7, "Fait à la Cité des Sciences, le $date", 0, 1, 'L');
     
     $pdf->Ln(20);
     
@@ -507,13 +685,28 @@ function generatePDF($demande) {
     
     // QR Code pour vérification
     // URL locale pour le développement (à changer en production)
-    $baseUrl = 'http://localhost:8000';
-    $verificationUrl = $baseUrl . '/verify_document.php?id=' . $demande['id'];
+    // IMPORTANT: localhost ne fonctionne QUE sur l'ordinateur local
+    // Pour tester depuis un téléphone, utilisez l'IP locale (ex: http://192.168.1.100:8000)
+    // En production, utilisez le vrai domaine (ex: https://votre-domaine.com)
+   $baseUrl = 'http://localhost:8000'; // ⚠️ Changez en IP locale pour tester sur téléphone
+   
+   $verificationUrl = $baseUrl . '/verify_document.php?id=' . $demande['id'];
     
-    // Position pour le QR code (en bas à droite)
-    $qrX = 150; // Position X
-    $qrY = $pdf->GetY() + 10; // Position Y
+    // Position pour le QR code (en bas à droite) - éviter pages vides
     $qrSize = 30; // Taille du QR code
+    $qrX = 150; // Position X
+
+    $pageH = $pdf->getPageHeight();
+    $bottomMargin = method_exists($pdf, 'getFooterMargin') ? $pdf->getFooterMargin() : 10;
+    $safeBottom = $pageH - $bottomMargin - 8;
+    $qrYFixed = $safeBottom - $qrSize - 10; // place le QR au-dessus du footer
+
+    // Si le contenu actuel descend trop bas, passer à une nouvelle page
+    if ($pdf->GetY() > ($qrYFixed - 22)) {
+        $pdf->AddPage();
+    }
+
+    $qrY = $qrYFixed;
     
     $pdf->SetX($qrX);
     $pdf->write2DBarcode($verificationUrl, 'QRCODE,L', $qrX, $qrY, $qrSize, $qrSize, [

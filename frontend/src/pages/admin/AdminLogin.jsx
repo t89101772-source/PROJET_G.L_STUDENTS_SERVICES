@@ -18,10 +18,10 @@ export default function AdminLogin() {
     setLoading(true)
 
     try {
-      const result = await login(
-        { login: formData.login, password: formData.password },
-        'admin'
-      )
+      const result = await login({
+        login: formData.login,
+        password: formData.password
+      })
 
       if (result.success) {
         navigate('/admin/dashboard')
@@ -38,27 +38,58 @@ export default function AdminLogin() {
   if (loading) return <LoadingPage />
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50 flex items-center justify-center p-4">
+      {/* Animation de fond académique */}
+      <div className="absolute inset-0 overflow-hidden">
+        <motion.div
+          className="absolute top-0 right-0 w-96 h-96 bg-blue-100 rounded-full opacity-10 blur-3xl"
+          animate={{
+            x: [0, 50, 0],
+            y: [0, 50, 0],
+            scale: [1, 1.2, 1],
+          }}
+          transition={{
+            duration: 20,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+        <motion.div
+          className="absolute bottom-0 left-0 w-80 h-80 bg-slate-100 rounded-full opacity-10 blur-3xl"
+          animate={{
+            x: [0, -40, 0],
+            y: [0, -60, 0],
+            scale: [1, 1.3, 1],
+          }}
+          transition={{
+            duration: 25,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      </div>
+
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
+        initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md"
+        className="w-full max-w-md relative z-10"
       >
-        <div className="bg-white rounded-3xl shadow-2xl p-8">
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
           <div className="text-center mb-8">
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: 'spring', delay: 0.2 }}
-              className="w-20 h-20 mx-auto bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg"
+              className="w-16 h-16 mx-auto bg-gradient-to-br from-blue-700 to-blue-800 rounded-xl flex items-center justify-center mb-4 shadow-md"
             >
-              <Shield className="w-10 h-10 text-white" />
+              <Shield className="w-8 h-8 text-white" />
             </motion.div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">
               Espace Administrateur
             </h1>
-            <p className="text-gray-600">Accès sécurisé à l'administration</p>
+            <p className="text-sm text-gray-600">École Supérieure d’Ingénierie NovaTech - Université Cité des Sciences</p>
+            <p className="text-xs text-gray-500 mt-1">Accès sécurisé à l'administration</p>
           </div>
 
           {error && (
@@ -83,8 +114,9 @@ export default function AdminLogin() {
                   type="text"
                   value={formData.login}
                   onChange={(e) => setFormData({ ...formData, login: e.target.value })}
-                  className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition-all bg-white"
                   placeholder="admin"
+                  defaultValue="admin"
                   required
                 />
               </div>
@@ -100,7 +132,7 @@ export default function AdminLogin() {
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition-all bg-white"
                   placeholder="••••••••"
                   required
                 />
@@ -108,11 +140,11 @@ export default function AdminLogin() {
             </div>
 
             <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+              className="w-full py-3 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-semibold shadow-md hover:shadow-lg transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span>Se connecter</span>
               <ArrowRight className="w-5 h-5" />
@@ -122,7 +154,7 @@ export default function AdminLogin() {
           <div className="mt-6 text-center">
             <button
               onClick={() => navigate('/')}
-              className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
+              className="text-sm text-gray-600 hover:text-blue-700 transition-colors"
             >
               ← Retour à l'accueil
             </button>

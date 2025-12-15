@@ -1,36 +1,37 @@
 import { motion } from 'framer-motion'
 
-export default function StatCard({ 
-  title, 
-  value, 
-  icon: Icon, 
-  color = 'primary',
-  delay = 0 
-}) {
+export default function StatCard({ title, value, icon: Icon, color = 'blue', delay = 0 }) {
   const colorClasses = {
-    primary: 'from-primary-500 to-primary-600',
-    success: 'from-success-500 to-success-600',
-    orange: 'from-orange-500 to-orange-600',
-    red: 'from-red-500 to-red-600',
-    blue: 'from-blue-500 to-blue-600',
+    blue: 'bg-blue-50 text-blue-700 border-blue-200',
+    orange: 'bg-orange-50 text-orange-700 border-orange-200',
+    primary: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    red: 'bg-red-50 text-red-700 border-red-200',
+  }
+
+  const iconBgClasses = {
+    blue: 'bg-blue-100',
+    orange: 'bg-orange-100',
+    primary: 'bg-indigo-100',
+    red: 'bg-red-100',
   }
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay }}
-      whileHover={{ y: -5, scale: 1.02 }}
-      className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all"
+      transition={{ delay, duration: 0.5 }}
+      className={`rounded-xl border-2 p-6 ${colorClasses[color] || colorClasses.blue}`}
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-          <h3 className="text-3xl font-bold text-gray-900">{value}</h3>
+          <p className="text-sm font-medium opacity-80 mb-1">{title}</p>
+          <p className="text-3xl font-bold">{value}</p>
         </div>
-        <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${colorClasses[color]} flex items-center justify-center`}>
-          <Icon className="w-7 h-7 text-white" />
-        </div>
+        {Icon && (
+          <div className={`p-3 rounded-lg ${iconBgClasses[color] || iconBgClasses.blue}`}>
+            <Icon className="w-6 h-6" />
+          </div>
+        )}
       </div>
     </motion.div>
   )

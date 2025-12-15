@@ -89,7 +89,9 @@ if ($method === 'GET') {
         // Envoyer le fichier
         $filename = basename($filepath);
         header('Content-Type: application/pdf');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        // Par défaut on affiche le PDF dans le navigateur (scan QR sur téléphone)
+        // (un téléchargement est toujours possible depuis le viewer du navigateur)
+        header('Content-Disposition: inline; filename="' . $filename . '"');
         header('Content-Length: ' . filesize($filepath));
         header('Cache-Control: must-revalidate');
         header('Pragma: public');

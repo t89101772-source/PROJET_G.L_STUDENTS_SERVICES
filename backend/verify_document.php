@@ -30,7 +30,7 @@ try {
             e.apogee_number
         FROM demande d
         LEFT JOIN etudiant e ON d.apogee_number = e.apogee_number
-        WHERE d.id = ? AND d.status = 'Acceptée'
+        WHERE d.id = ? AND d.status IN ('Acceptée', 'Traitée')
     ");
     $stmt->execute([$demandeId]);
     $demande = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -55,7 +55,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vérification de Document - Université Abdelmalek Essaidi</title>
+    <title>Vérification de Document - NovaTech</title>
     <style>
         * {
             margin: 0;
@@ -223,9 +223,12 @@ try {
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">UAE</div>
-            <h1>UNIVERSITÉ ABDELMALEK ESSAIDI</h1>
-            <p>Vérification de Document Officiel</p>
+            <div class="logo" style="background: #ffffff; border: 1px solid #e5e7eb; overflow:hidden;">
+                <img src="/assets/logo_novatech_mark.svg" alt="NovaTech" style="width:66px; height:66px; display:block; margin:7px auto;" />
+            </div>
+            <h1>ÉCOLE SUPÉRIEURE D’INGÉNIERIE NOVATECH</h1>
+            <h2 style="font-size: 18px; color: #6b7280; margin-top: 5px;">Université Cité des Sciences</h2>
+            <p>Vérification de Document</p>
         </div>
         
         <div style="text-align: center;">
@@ -247,7 +250,7 @@ try {
                     <span class="info-label">Date d'émission :</span>
                     <span class="info-value"><?php echo date('d/m/Y', strtotime($demande['date_demande'])); ?></span>
                 </div>
-                <?php if ($demande['document_path']): ?>
+        <?php if (!empty($demande['document_path'])): ?>
                 <div class="info-row">
                     <span class="info-label">Statut :</span>
                     <span class="info-value" style="color: #10b981;">✓ Généré et valide</span>
@@ -255,6 +258,17 @@ try {
                 <?php endif; ?>
             </div>
         </div>
+
+        <?php if (!empty($demande['document_path'])): ?>
+        <div style="text-align:center; margin-top: 20px;">
+            <a
+                href="/api/download-document?demande_id=<?php echo urlencode($demande['id']); ?>"
+                style="display:inline-block; background:#667eea; color:#fff; text-decoration:none; padding:12px 18px; border-radius:12px; font-weight:700;"
+            >
+                Ouvrir / Télécharger le PDF
+            </a>
+        </div>
+        <?php endif; ?>
         
         <div class="info-section">
             <h2>Informations de l'Étudiant</h2>
@@ -296,12 +310,11 @@ try {
         </div>
         
         <div class="warning">
-            <strong>⚠️ Important :</strong> Ce document a été vérifié et authentifié par l'Université Abdelmalek Essaidi. 
-            Toute falsification est passible de poursuites judiciaires.
+            <strong>⚠️ Important :</strong> Cette page vérifie l’existence du document dans le système (projet pédagogique).
         </div>
         
         <div class="footer">
-            <p>Université Abdelmalek Essaidi - Tétouan, Maroc</p>
+            <p>École Supérieure d’Ingénierie NovaTech - Université Cité des Sciences</p>
             <p>Vérifié le <?php echo date('d/m/Y à H:i'); ?></p>
         </div>
     </div>

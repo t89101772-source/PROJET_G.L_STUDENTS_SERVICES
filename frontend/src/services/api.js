@@ -19,11 +19,9 @@ api.interceptors.request.use((config) => {
 })
 
 export const authService = {
-  login: async (credentials, role) => {
+  login: async (credentials) => {
     const endpoint = '/auth'
-    const data = role === 'student' 
-      ? { apogeeNumber: credentials.apogeeNumber, email: credentials.email }
-      : { login: credentials.login, password: credentials.password }
+    const data = { login: credentials.login, password: credentials.password }
     const response = await api.post(endpoint, data)
     return response.data
   },
@@ -55,6 +53,11 @@ export const demandeService = {
     return response.data
   },
   
+  sendEmailWithDocument: async (demandeId) => {
+    const response = await api.post('/send-email-document', { demande_id: demandeId })
+    return response.data
+  },
+  
   downloadDocument: async (demandeId, apogeeNumber = null) => {
     const url = apogeeNumber 
       ? `/download-document?demande_id=${demandeId}&apogee_number=${apogeeNumber}`
@@ -63,6 +66,11 @@ export const demandeService = {
     const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
     const fullUrl = backendUrl.replace('/api', '') + url
     window.open(fullUrl, '_blank')
+  },
+  
+  getByNumero: async (numeroDemande) => {
+    const response = await api.get(`/demandes/suivi/${numeroDemande}`)
+    return response.data
   },
 }
 
@@ -86,6 +94,21 @@ export const reclamationService = {
     const response = await api.patch(`/reclamations/${id}/respond`, { reponse })
     return response.data
   },
+
+  reject: async (id, motif) => {
+    const response = await api.patch(`/reclamations/${id}/reject`, { motif })
+    return response.data
+  },
+
+  reopen: async (id) => {
+    const response = await api.patch(`/reclamations/${id}/reopen`)
+    return response.data
+  },
+
+  resendDocument: async (id) => {
+    const response = await api.patch(`/reclamations/${id}/resend-document`)
+    return response.data
+  },
   
   close: async (id) => {
     const response = await api.patch(`/reclamations/${id}/close`)
@@ -105,16 +128,17 @@ export const statsService = {
   },
 }
 
-export const chatbotService = {
-  sendMessage: async (message) => {
-    const response = await api.post('/chatbot', { message })
+
+export const niveauService = {
+  getAll: async () => {
+    const response = await api.get('/niveaux')
     return response.data
   },
-  
-  getSuggestions: async () => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
-    const userType = user.role || 'guest'
-    const response = await api.get(`/chatbot?user_type=${userType}`)
+}
+
+export const anneeService = {
+  getAll: async () => {
+    const response = await api.get('/annees')
     return response.data
   },
 }
