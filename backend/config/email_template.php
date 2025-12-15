@@ -374,15 +374,15 @@ function sendEmailConfirmationReclamation($to_email, $nom, $prenom, $reclamation
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'da805632@gmail.com';
-        $mail->Password = 'niqzbihnzjsfkals';
+        $mail->Username = 'votre email';
+        $mail->Password = 'votre mot de passe de l'app';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
         $mail->SMTPDebug = 0;
 
-        $mail->setFrom('da805632@gmail.com', 'UnivDocs');
-        $mail->addReplyTo('da805632@gmail.com', 'Support UnivDocs');
+        $mail->setFrom('votre email', 'UnivDocs');
+        $mail->addReplyTo('votre email', 'Support UnivDocs');
         $mail->addAddress($to_email, $prenom . ' ' . $nom);
 
         $mail->isHTML(true);
@@ -512,15 +512,15 @@ function sendEmailRefusee($to_email, $nom, $prenom, $numero_demande, $document_t
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'da805632@gmail.com';
-        $mail->Password = 'niqzbihnzjsfkals';
+        $mail->Username = 'votre email';
+        $mail->Password = 'votre mot de passe de l'app';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
         $mail->SMTPDebug = 0;
         
-        $mail->setFrom('da805632@gmail.com', 'UnivDocs');
-        $mail->addReplyTo('da805632@gmail.com', 'Support UnivDocs');
+        $mail->setFrom('votre email', 'UnivDocs');
+        $mail->addReplyTo('votre email', 'Support UnivDocs');
         $mail->addAddress($to_email, $prenom . ' ' . $nom);
         
         $mail->isHTML(true);
@@ -554,15 +554,15 @@ function sendEmailReclamation($to_email, $nom, $prenom, $numero_demande, $docume
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'da805632@gmail.com';
-        $mail->Password = 'niqzbihnzjsfkals';
+        $mail->Username = 'votre email';
+        $mail->Password = 'votre mot de passe de l'app';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
         $mail->SMTPDebug = 0;
         
-        $mail->setFrom('da805632@gmail.com', 'UnivDocs');
-        $mail->addReplyTo('da805632@gmail.com', 'Support UnivDocs');
+        $mail->setFrom('votre email', 'UnivDocs');
+        $mail->addReplyTo('votre email', 'Support UnivDocs');
         $mail->addAddress($to_email, $prenom . ' ' . $nom);
         
         $mail->isHTML(true);
@@ -599,16 +599,16 @@ function sendEmailConfirmationDemande($to_email, $nom, $prenom, $numero_demande,
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'da805632@gmail.com';
-        $mail->Password = 'niqzbihnzjsfkals';
+        $mail->Username = 'votre email';
+        $mail->Password = 'votre mot de passe de l'app';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
         $mail->SMTPDebug = 0;
         
         // Expéditeur
-        $mail->setFrom('da805632@gmail.com', 'UnivDocs');
-        $mail->addReplyTo('da805632@gmail.com', 'Support UnivDocs');
+        $mail->setFrom('votre email', 'UnivDocs');
+        $mail->addReplyTo('votre email', 'Support UnivDocs');
         
         // Destinataire
         $mail->addAddress($to_email, $prenom . ' ' . $nom);
