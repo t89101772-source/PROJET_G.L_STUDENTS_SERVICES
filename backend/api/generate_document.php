@@ -135,6 +135,22 @@ if (!defined('PDF_LIB_ONLY')) {
 }
 
 /**
+ * Nettoie le niveau pour n'afficher que la partie principale (CI3, CI2, 2AP1, 2AP2) sans le semestre
+ */
+function cleanNiveau($niveau) {
+    if (empty($niveau)) {
+        return $niveau;
+    }
+    
+    // Si le niveau contient un tiret suivi de "S" (ex: "CI3-S9", "2AP1-S1"), extraire seulement la partie avant le tiret
+    if (preg_match('/^([^-]+)/', $niveau, $matches)) {
+        return trim($matches[1]);
+    }
+    
+    return $niveau;
+}
+
+/**
  * Génère un PDF pour une demande
  */
 function generatePDF($demande, $validationData = []) {
@@ -291,25 +307,48 @@ function generatePDF($demande, $validationData = []) {
             $additionalInfo = !empty($demande['additional_info']) ? json_decode($demande['additional_info'], true) : [];
             $annee = $additionalInfo['annee_universitaire'] ?? date('Y') . '-' . (date('Y') + 1);
             
-            // Chercher l'inscription réelle dans la BDD pour obtenir le niveau
-            global $pdo;
-            $stmt = $pdo->prepare("
-                SELECT * FROM inscription 
-                WHERE apogee_number = ? AND annee_universitaire = ?
-                ORDER BY date_inscription DESC LIMIT 1
-            ");
-            $stmt->execute([$demande['apogee_number'], $annee]);
-            $inscriptionReelle = $stmt->fetch(PDO::FETCH_ASSOC);
+            // Utiliser d'abord les données de validation si disponibles
+            $inscriptionData = $validationData['inscription'] ?? null;
             
-            if ($inscriptionReelle && !empty($inscriptionReelle['niveau'])) {
+            // Si pas de données de validation, chercher l'inscription dans la BDD
+            if (!$inscriptionData || empty($inscriptionData['niveau'])) {
+                global $pdo;
+                // Chercher d'abord pour l'année spécifiée
+                $stmt = $pdo->prepare("
+                    SELECT * FROM inscription 
+                    WHERE apogee_number = ? AND annee_universitaire = ?
+                    ORDER BY date_inscription DESC LIMIT 1
+                ");
+                $stmt->execute([$demande['apogee_number'], $annee]);
+                $inscriptionData = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                // Si pas trouvé pour l'année spécifiée, chercher la dernière inscription valide
+                if (!$inscriptionData || empty($inscriptionData['niveau'])) {
+                    $stmt = $pdo->prepare("
+                        SELECT * FROM inscription 
+                        WHERE apogee_number = ? 
+                        AND statut IN ('Inscrit', 'Réinscrit', 'Diplômé')
+                        ORDER BY annee_universitaire DESC, date_inscription DESC 
+                        LIMIT 1
+                    ");
+                    $stmt->execute([$demande['apogee_number']]);
+                    $inscriptionData = $stmt->fetch(PDO::FETCH_ASSOC);
+                }
+            }
+            
+            // Afficher le niveau s'il est disponible (sans semestre, juste le niveau: CI3, CI2, 2AP1, 2AP2)
+            if ($inscriptionData && !empty($inscriptionData['niveau'])) {
                 $pdf->SetFont('helvetica', 'B', 11);
                 $pdf->SetX(40);
                 $pdf->Cell(60, 7, 'Niveau :', 0, 0, 'L');
                 $pdf->SetFont('helvetica', '', 11);
-                $niveauDisplay = $inscriptionReelle['niveau'];
-                if (!empty($inscriptionReelle['filiere']) && $inscriptionReelle['filiere'] !== 'Cycle Préparatoire') {
-                    $niveauDisplay .= ' - ' . $inscriptionReelle['filiere'];
+                $niveauDisplay = cleanNiveau($inscriptionData['niveau']);
+                
+                // Ajouter la filière si disponible
+                if (!empty($inscriptionData['filiere']) && $inscriptionData['filiere'] !== 'Cycle Préparatoire') {
+                    $niveauDisplay .= ' - ' . $inscriptionData['filiere'];
                 }
+                
                 $pdf->Cell(0, 7, $niveauDisplay, 0, 1, 'L');
             }
         }
@@ -332,28 +371,51 @@ function generatePDF($demande, $validationData = []) {
             // Récupérer les données RÉELLES depuis la base de données
             $annee = $additionalInfo['annee_universitaire'] ?? date('Y') . '-' . (date('Y') + 1);
             
-            // Chercher l'inscription réelle dans la BDD
-            global $pdo;
-            $stmt = $pdo->prepare("
-                SELECT * FROM inscription 
-                WHERE apogee_number = ? AND annee_universitaire = ?
-                ORDER BY date_inscription DESC LIMIT 1
-            ");
-            $stmt->execute([$demande['apogee_number'], $annee]);
-            $inscriptionReelle = $stmt->fetch(PDO::FETCH_ASSOC);
+            // Utiliser d'abord les données de validation si disponibles
+            $inscriptionReelle = $validationData['inscription'] ?? null;
             
-            if ($inscriptionReelle) {
-                $niveau = $inscriptionReelle['niveau'];
-                $filiere = $inscriptionReelle['filiere'];
-                $statut = $inscriptionReelle['statut'];
-                // Mentionner l'année exacte d'inscription
-                if ($filiere) {
-                    $pdf->MultiCell(0, 6, "est régulièrement inscrit(e) à l'École Supérieure d'Ingénierie NovaTech - Université Cité des Sciences pour l'année universitaire $annee au niveau $niveau en $filiere (Statut: $statut).", 0, 'L');
+            // Si pas de données de validation, chercher l'inscription dans la BDD
+            if (!$inscriptionReelle || empty($inscriptionReelle['niveau'])) {
+                global $pdo;
+                // Chercher d'abord pour l'année spécifiée
+                $stmt = $pdo->prepare("
+                    SELECT * FROM inscription 
+                    WHERE apogee_number = ? AND annee_universitaire = ?
+                    ORDER BY date_inscription DESC LIMIT 1
+                ");
+                $stmt->execute([$demande['apogee_number'], $annee]);
+                $inscriptionReelle = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                // Si pas trouvé pour l'année spécifiée, chercher la dernière inscription valide
+                if (!$inscriptionReelle || empty($inscriptionReelle['niveau'])) {
+                    $stmt = $pdo->prepare("
+                        SELECT * FROM inscription 
+                        WHERE apogee_number = ? 
+                        AND statut IN ('Inscrit', 'Réinscrit', 'Diplômé')
+                        ORDER BY annee_universitaire DESC, date_inscription DESC 
+                        LIMIT 1
+                    ");
+                    $stmt->execute([$demande['apogee_number']]);
+                    $inscriptionReelle = $stmt->fetch(PDO::FETCH_ASSOC);
+                }
+            }
+            
+            if ($inscriptionReelle && !empty($inscriptionReelle['niveau'])) {
+                $niveau = cleanNiveau($inscriptionReelle['niveau']);
+                $filiere = $inscriptionReelle['filiere'] ?? null;
+                $statut = $inscriptionReelle['statut'] ?? 'Inscrit';
+                // Utiliser l'année de l'inscription trouvée si différente de celle demandée
+                $anneeAffichage = $inscriptionReelle['annee_universitaire'] ?? $annee;
+                
+                // Mentionner l'année exacte d'inscription avec le niveau (sans semestre: CI3, CI2, 2AP1, 2AP2)
+                if ($filiere && $filiere !== 'Cycle Préparatoire') {
+                    $pdf->MultiCell(0, 6, "est régulièrement inscrit(e) à l'École Supérieure d'Ingénierie NovaTech - Université Cité des Sciences pour l'année universitaire $anneeAffichage au niveau $niveau en $filiere (Statut: $statut).", 0, 'L');
                 } else {
-                    // Cycle préparatoire (pas de filière)
-                    $pdf->MultiCell(0, 6, "est régulièrement inscrit(e) à l'École Supérieure d'Ingénierie NovaTech - Université Cité des Sciences pour l'année universitaire $annee au niveau $niveau (Statut: $statut).", 0, 'L');
+                    // Cycle préparatoire (pas de filière) ou filière non spécifiée
+                    $pdf->MultiCell(0, 6, "est régulièrement inscrit(e) à l'École Supérieure d'Ingénierie NovaTech - Université Cité des Sciences pour l'année universitaire $anneeAffichage au niveau $niveau (Statut: $statut).", 0, 'L');
                 }
             } else {
+                // Fallback si aucune inscription trouvée (ne devrait pas arriver après validation)
                 $pdf->MultiCell(0, 6, "est régulièrement inscrit(e) à l'École Supérieure d'Ingénierie NovaTech - Université Cité des Sciences pour l'année universitaire $annee.", 0, 'L');
             }
             break;

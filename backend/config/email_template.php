@@ -696,6 +696,12 @@ function getEmailTemplateConfirmation($nom, $prenom, $numero_demande, $document_
                                 </p>
                             </div>
                             
+                            <div style="background-color: #fef3c7; border: 1px solid #fcd34d; padding: 15px; margin: 25px 0; border-radius: 5px;">
+                                <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.6;">
+                                    <strong>📋 Note importante :</strong> Une fois votre demande acceptée, vous recevrez un email contenant votre document avec un <strong>numéro d\'attestation unique</strong>. Ce numéro vous permettra de réclamer ou de vérifier votre document si nécessaire. Conservez-le précieusement.
+                                </p>
+                            </div>
+                            
                             <p style="color: #4b5563; margin: 30px 0 0 0; font-size: 16px; line-height: 1.6;">
                                 <strong>Important :</strong> Conservez bien votre numéro de demande <strong>' . htmlspecialchars($numero_demande) . '</strong> pour suivre l\'avancement de votre demande.
                             </p>

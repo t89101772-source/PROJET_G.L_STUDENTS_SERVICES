@@ -371,10 +371,11 @@ if ($method === 'GET') {
             // (après avoir envoyé la réponse au client)
             error_log("PATCH - Début traitement en arrière-plan pour demande ID: $id");
 
-            // 1) Phase ACCEPTATION : générer le PDF et enregistrer le chemin, SANS envoyer d'email
+            // 1) Phase ACCEPTATION : générer le PDF et enregistrer le chemin (sans envoyer l'email)
+            // L'email sera envoyé uniquement quand l'admin clique sur le bouton "Envoyer email"
             if ($status === 'Acceptée') {
                 try {
-                    error_log("PATCH - Acceptée: Génération PDF (sans envoi d'email) pour demande ID: $id");
+                    error_log("PATCH - Acceptée: Génération PDF (sans envoi email automatique) pour demande ID: $id");
 
                     // Générer le numéro d'attestation
                     $numero_attestation = 'ATT-' . date('Y') . '-' . str_pad($id, 6, '0', STR_PAD_LEFT);
@@ -406,8 +407,11 @@ if ($method === 'GET') {
                         $pdf_path = __DIR__ . '/../' . $relative_path;
 
                         if ($relative_path && file_exists($pdf_path)) {
-                            error_log("PATCH - PDF généré (sans email): $pdf_path");
+                            error_log("PATCH - PDF généré: $pdf_path");
                             // Mettre à jour la demande avec le numéro d'attestation et le chemin du PDF
+                            // NOTE: L'email ne sera PAS envoyé automatiquement ici. Il sera envoyé uniquement
+                            // quand l'admin clique sur le bouton "Envoyer email" pour respecter les 3 phases :
+                            // 1. Demande créée, 2. Demande acceptée (PDF généré), 3. Email envoyé
                             $updateStmt = $pdo->prepare("UPDATE demande SET numero_attestation = ?, document_path = ?, status = 'Acceptée' WHERE id = ?");
                             $updateStmt->execute([$numero_attestation, $relative_path, $id]);
                         } else {
@@ -420,7 +424,7 @@ if ($method === 'GET') {
                         error_log("PATCH - Validation échouée lors de la génération PDF post-acceptation: " . ($validation['error'] ?? 'Erreur inconnue'));
                     }
                 } catch (Exception $e) {
-                    error_log("PATCH - Exception génération PDF (phase Acceptée, sans email): " . $e->getMessage());
+                    error_log("PATCH - Exception génération PDF (phase Acceptée): " . $e->getMessage());
                 }
             }
 

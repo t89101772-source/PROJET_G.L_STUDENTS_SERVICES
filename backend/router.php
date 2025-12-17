@@ -94,9 +94,7 @@ if (strpos($path, '/api/') === 0 || $path === '/api') {
             break;
 
         case 'send-email-document':
-                // Redirigé vers generate-document qui gère aussi l'envoi d'email
-                $_SERVER['PATH_INFO'] = '/' . implode('/', array_slice($segments, 1));
-                require_once __DIR__ . '/api/generate_document.php';
+                require_once __DIR__ . '/api/send_email_document.php';
                 break;
 
             case 'generate-document':
