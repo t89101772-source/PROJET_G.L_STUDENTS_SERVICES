@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext'
 import LoadingPage from '../../components/LoadingPage'
 
 export default function AdminLogin() {
-  const [formData, setFormData] = useState({ login: '', password: '' })
+  const [formData, setFormData] = useState({ login: 'admin', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
@@ -116,7 +116,6 @@ export default function AdminLogin() {
                   onChange={(e) => setFormData({ ...formData, login: e.target.value })}
                   className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition-all bg-white"
                   placeholder="admin"
-                  defaultValue="admin"
                   required
                 />
               </div>

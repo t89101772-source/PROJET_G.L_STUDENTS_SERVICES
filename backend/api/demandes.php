@@ -371,23 +371,26 @@ if ($method === 'GET') {
             // (après avoir envoyé la réponse au client)
             error_log("PATCH - Début traitement en arrière-plan pour demande ID: $id");
 
-            // 1) Phase ACCEPTATION : générer le PDF et enregistrer le chemin (sans envoyer l'email)
-            // L'email sera envoyé uniquement quand l'admin clique sur le bouton "Envoyer email"
+            // 1) Phase ACCEPTATION : générer le PDF ET envoyer l'email automatiquement
+            // Phase 1: Demande créée, Phase 2: Document envoyé (quand admin accepte)
             if ($status === 'Acceptée') {
                 try {
-                    error_log("PATCH - Acceptée: Génération PDF (sans envoi email automatique) pour demande ID: $id");
-
+                    error_log("PATCH - Début génération PDF pour demande ID: $id");
+                    
                     // Générer le numéro d'attestation
                     $numero_attestation = 'ATT-' . date('Y') . '-' . str_pad($id, 6, '0', STR_PAD_LEFT);
+                    error_log("PATCH - Numéro attestation: $numero_attestation");
 
                     // Générer le PDF
                     define('PDF_LIB_ONLY', true);
                     require_once __DIR__ . '/generate_document.php';
                     require_once __DIR__ . '/validate_document.php';
+                    error_log("PATCH - Fichiers PDF chargés");
 
                     // Préparer les données pour la génération
                     $additionalInfo = !empty($demande['additional_info']) ? json_decode($demande['additional_info'], true) : [];
                     $validation = validateDocumentRequest($pdo, $demande['document_type'], $demande['apogee_number'], $additionalInfo);
+                    error_log("PATCH - Validation: " . ($validation['valid'] ? 'OK' : 'ÉCHEC'));
 
                     if ($validation['valid']) {
                         $demandeForPDF = [
@@ -403,17 +406,89 @@ if ($method === 'GET') {
                             'prenom' => $demande['prenom'],
                         ];
 
-                        $relative_path = generatePDF($demandeForPDF, $validation['data'] ?? []);
-                        $pdf_path = __DIR__ . '/../' . $relative_path;
+                        error_log("PATCH - Génération PDF en cours...");
+                        try {
+                            $relative_path = generatePDF($demandeForPDF, $validation['data'] ?? []);
+                            error_log("PATCH - generatePDF retourné: " . ($relative_path ?: 'NULL'));
+                            if ($relative_path) {
+                                $pdf_path = __DIR__ . '/../' . $relative_path;
+                                error_log("PATCH - PDF généré: $pdf_path, existe: " . (file_exists($pdf_path) ? 'OUI' : 'NON'));
+                            } else {
+                                error_log("PATCH - ERREUR: generatePDF a retourné NULL ou vide");
+                                $pdf_path = null;
+                            }
+                        } catch (Exception $e) {
+                            error_log("PATCH - Exception lors de la génération PDF: " . $e->getMessage());
+                            error_log("PATCH - Stack trace: " . $e->getTraceAsString());
+                            $relative_path = null;
+                            $pdf_path = null;
+                        } catch (Error $e) {
+                            error_log("PATCH - Error fatale lors de la génération PDF: " . $e->getMessage());
+                            error_log("PATCH - Stack trace: " . $e->getTraceAsString());
+                            $relative_path = null;
+                            $pdf_path = null;
+                        }
 
                         if ($relative_path && file_exists($pdf_path)) {
-                            error_log("PATCH - PDF généré: $pdf_path");
                             // Mettre à jour la demande avec le numéro d'attestation et le chemin du PDF
-                            // NOTE: L'email ne sera PAS envoyé automatiquement ici. Il sera envoyé uniquement
-                            // quand l'admin clique sur le bouton "Envoyer email" pour respecter les 3 phases :
-                            // 1. Demande créée, 2. Demande acceptée (PDF généré), 3. Email envoyé
-                            $updateStmt = $pdo->prepare("UPDATE demande SET numero_attestation = ?, document_path = ?, status = 'Acceptée' WHERE id = ?");
+                            $updateStmt = $pdo->prepare("UPDATE demande SET numero_attestation = ?, document_path = ? WHERE id = ?");
                             $updateStmt->execute([$numero_attestation, $relative_path, $id]);
+                            error_log("PATCH - PDF enregistré en base de données");
+                            
+                            // ENVOYER L'EMAIL AUTOMATIQUEMENT avec le document
+                            if (!empty($demande['email'])) {
+                                error_log("PATCH - Début envoi email à: " . $demande['email']);
+                                require_once __DIR__ . '/../config/email_template.php';
+                                
+                                if (function_exists('sendEmailWithDocument')) {
+                                    error_log("PATCH - Fonction sendEmailWithDocument trouvée, envoi en cours...");
+                                    $emailSent = sendEmailWithDocument(
+                                        $demande['email'],
+                                        $demande['nom'],
+                                        $demande['prenom'],
+                                        $numero_attestation,
+                                        $demande['numero_demande'],
+                                        $demande['document_type'],
+                                        $pdf_path
+                                    );
+                                    error_log("PATCH - Résultat envoi email: " . var_export($emailSent, true));
+                                    
+                                    // Ne mettre à jour le statut à 'Traitée' QUE si l'email est vraiment envoyé
+                                    if ($emailSent === true) {
+                                        try {
+                                            $checkColumn = $pdo->query("SHOW COLUMNS FROM demande LIKE 'email_sent'");
+                                            if ($checkColumn->rowCount() == 0) {
+                                                $pdo->exec("ALTER TABLE demande ADD COLUMN email_sent TINYINT(1) DEFAULT 0");
+                                            }
+                                            $checkColumn = $pdo->query("SHOW COLUMNS FROM demande LIKE 'email_sent_at'");
+                                            if ($checkColumn->rowCount() == 0) {
+                                                $pdo->exec("ALTER TABLE demande ADD COLUMN email_sent_at DATETIME NULL");
+                                            }
+                                            
+                                            $updateStmt = $pdo->prepare("UPDATE demande SET email_sent = 1, email_sent_at = NOW(), status = 'Traitée' WHERE id = ?");
+                                            $updateStmt->execute([$id]);
+                                            error_log("PATCH - Email envoyé avec succès pour demande ID: $id, statut mis à jour à 'Traitée'");
+                                        } catch (PDOException $e) {
+                                            error_log("PATCH - Erreur update email_sent: " . $e->getMessage());
+                                        }
+                                    } else {
+                                        error_log("PATCH - Échec envoi email pour demande ID: $id - emailSent = " . var_export($emailSent, true));
+                                        // Mettre à jour le statut à 'Acceptée' si l'email échoue
+                                        $updateStmt = $pdo->prepare("UPDATE demande SET status = 'Acceptée' WHERE id = ?");
+                                        $updateStmt->execute([$id]);
+                                    }
+                                } else {
+                                    error_log("PATCH - Fonction sendEmailWithDocument non trouvée");
+                                    // Mettre à jour le statut quand même
+                                    $updateStmt = $pdo->prepare("UPDATE demande SET status = 'Acceptée' WHERE id = ?");
+                                    $updateStmt->execute([$id]);
+                                }
+                            } else {
+                                error_log("PATCH - Pas d'email pour la demande ID: $id");
+                                // Pas d'email, mettre à jour le statut à 'Acceptée'
+                                $updateStmt = $pdo->prepare("UPDATE demande SET status = 'Acceptée' WHERE id = ?");
+                                $updateStmt->execute([$id]);
+                            }
                         } else {
                             error_log("PATCH - Erreur: Impossible de générer le PDF pour la demande ID: $id");
                             // Mettre à jour quand même le statut et le numéro d'attestation
@@ -421,10 +496,11 @@ if ($method === 'GET') {
                             $updateStmt->execute([$numero_attestation, $id]);
                         }
                     } else {
-                        error_log("PATCH - Validation échouée lors de la génération PDF post-acceptation: " . ($validation['error'] ?? 'Erreur inconnue'));
+                        error_log("PATCH - Validation échouée: " . ($validation['error'] ?? 'Erreur inconnue'));
                     }
                 } catch (Exception $e) {
-                    error_log("PATCH - Exception génération PDF (phase Acceptée): " . $e->getMessage());
+                    error_log("PATCH - Exception génération PDF: " . $e->getMessage());
+                    error_log("PATCH - Stack trace: " . $e->getTraceAsString());
                 }
             }
 

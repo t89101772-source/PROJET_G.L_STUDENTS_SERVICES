@@ -57,12 +57,18 @@ if (strpos($path, '/student/') !== false) {
     try {
         $totalDemandes = $pdo->query("SELECT COUNT(*) FROM demande")->fetchColumn();
         $demandesEnAttente = $pdo->query("SELECT COUNT(*) FROM demande WHERE status = 'En attente'")->fetchColumn();
+        // Les demandes acceptées incluent "Acceptée" et "Traitée" (car Traitée = acceptée et email envoyé)
+        $demandesAcceptees = $pdo->query("SELECT COUNT(*) FROM demande WHERE status IN ('Acceptée', 'Traitée')")->fetchColumn();
+        $demandesRefusees = $pdo->query("SELECT COUNT(*) FROM demande WHERE status = 'Refusée'")->fetchColumn();
         $totalReclamations = $pdo->query("SELECT COUNT(*) FROM reclamation")->fetchColumn();
-        $reclamationsOuvertes = $pdo->query("SELECT COUNT(*) FROM reclamation WHERE status != 'Fermée'")->fetchColumn();
+        // Réclamations ouvertes = celles qui ne sont pas "Résolue" ou "Rejetée" ou "Fermée"
+        $reclamationsOuvertes = $pdo->query("SELECT COUNT(*) FROM reclamation WHERE status NOT IN ('Résolue', 'Rejetée', 'Fermée')")->fetchColumn();
         
         echo json_encode([
             'total_demandes' => (int)$totalDemandes,
             'demandes_en_attente' => (int)$demandesEnAttente,
+            'demandes_acceptees' => (int)$demandesAcceptees,
+            'demandes_refusees' => (int)$demandesRefusees,
             'total_reclamations' => (int)$totalReclamations,
             'reclamations_ouvertes' => (int)$reclamationsOuvertes
         ]);

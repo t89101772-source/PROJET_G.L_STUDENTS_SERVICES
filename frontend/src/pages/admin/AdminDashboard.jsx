@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-import { FileText, Clock, MessageSquare, TrendingUp, History as HistoryIcon, LogOut, CheckCircle, XCircle, RotateCcw, Ban, Send, Mail, Eye, GraduationCap } from 'lucide-react'
+import { FileText, Clock, MessageSquare, TrendingUp, History as HistoryIcon, LogOut, CheckCircle, XCircle, RotateCcw, Ban, Send, Mail, Eye, GraduationCap, Search, Filter } from 'lucide-react'
 import StatCard from '../../components/Layout/StatCard'
 import { useAuth } from '../../context/AuthContext'
 import { demandeService, reclamationService, statsService } from '../../services/api'
@@ -41,6 +41,15 @@ export default function AdminDashboard() {
   const [selectedReclamationType, setSelectedReclamationType] = useState('Tous')
   const [reclamationDocument, setReclamationDocument] = useState(null) // Document à consulter
   const [highlightedDemandeId, setHighlightedDemandeId] = useState(null)
+  const [activePage, setActivePage] = useState('home') // 'home', 'demandes', 'reclamations', 'historique'
+  
+  // États pour les filtres de l'historique
+  const [historySearchTerm, setHistorySearchTerm] = useState('')
+  const [historyFilterStatus, setHistoryFilterStatus] = useState('Tous')
+  const [historyFilterType, setHistoryFilterType] = useState('Tous')
+  const [historyFilterDate, setHistoryFilterDate] = useState('')
+  const [historyFilterRecordType, setHistoryFilterRecordType] = useState('Tous')
+  const [historyFiltersOpen, setHistoryFiltersOpen] = useState(false)
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['adminStats'],
@@ -57,12 +66,15 @@ export default function AdminDashboard() {
     queryFn: () => reclamationService.getAll(),
   })
 
+  // Filtrer pour ne montrer que les demandes "En attente" dans le tableau de gestion
   const sortedDemandes = useMemo(() => {
     if (!demandes) return []
-    return [...demandes].sort((a, b) => new Date(b.date_demande) - new Date(a.date_demande))
+    return [...demandes]
+      .filter(d => d.status === 'En attente') // Seulement les demandes en attente
+      .sort((a, b) => new Date(b.date_demande) - new Date(a.date_demande))
   }, [demandes])
 
-  // Historique combiné : demandes + réclamations, trié par date (plus récent en premier)
+  // Historique combiné : demandes + réclamations, trié par date (plus récent en premier) - 5 derniers pour dropdown
   const history5 = useMemo(() => {
     const all = []
     
@@ -104,6 +116,108 @@ export default function AdminDashboard() {
       .slice(0, 5)
   }, [demandes, reclamations])
 
+  // Historique complet pour la page Historique
+  const historyAll = useMemo(() => {
+    const all = []
+    
+    // Ajouter les demandes avec leur type
+    if (demandes) {
+      demandes.forEach(d => {
+        all.push({
+          id: d.id,
+          type: 'demande',
+          document_type: d.document_type,
+          status: d.status,
+          date: d.date_demande,
+          numero: d.numero_demande || d.numero_attestation,
+          nom: d.nom || '',
+          prenom: d.prenom || '',
+          justification: d.justification || ''
+        })
+      })
+    }
+    
+    // Ajouter les réclamations avec leur type
+    if (reclamations) {
+      reclamations.forEach(r => {
+        all.push({
+          id: r.id,
+          type: 'reclamation',
+          document_type: r.document_type,
+          status: r.status,
+          date: r.date_reclamation,
+          numero: r.numero_attestation_reclamee || r.numero_demande_reclamee,
+          nom: r.nom || '',
+          prenom: r.prenom || '',
+          reponse: r.reponse || ''
+        })
+      })
+    }
+    
+    // Trier par date (plus récent en premier) - TOUS les éléments
+    return all.sort((a, b) => new Date(b.date) - new Date(a.date))
+  }, [demandes, reclamations])
+
+  // Statuts disponibles pour l'historique
+  const historyStatuses = useMemo(() => {
+    const statusSet = new Set()
+    historyAll.forEach(item => {
+      if (item.status) statusSet.add(item.status)
+    })
+    return ['Tous', ...Array.from(statusSet).sort()]
+  }, [historyAll])
+
+  // Types de documents disponibles pour l'historique
+  const historyDocumentTypes = useMemo(() => {
+    const typeSet = new Set()
+    historyAll.forEach(item => {
+      if (item.document_type) typeSet.add(item.document_type)
+    })
+    return ['Tous', ...Array.from(typeSet).sort()]
+  }, [historyAll])
+
+  // Historique filtré
+  const filteredHistory = useMemo(() => {
+    let filtered = [...historyAll]
+    
+    // Filtrer par type d'enregistrement
+    if (historyFilterRecordType !== 'Tous') {
+      filtered = filtered.filter(item => item.type === historyFilterRecordType)
+    }
+    
+    // Filtrer par statut
+    if (historyFilterStatus !== 'Tous') {
+      filtered = filtered.filter(item => item.status === historyFilterStatus)
+    }
+    
+    // Filtrer par type de document
+    if (historyFilterType !== 'Tous') {
+      filtered = filtered.filter(item => item.document_type === historyFilterType)
+    }
+    
+    // Filtrer par date
+    if (historyFilterDate) {
+      const filterDate = new Date(historyFilterDate)
+      filtered = filtered.filter(item => {
+        const itemDate = new Date(item.date)
+        return itemDate.toDateString() === filterDate.toDateString()
+      })
+    }
+    
+    // Filtrer par recherche
+    if (historySearchTerm) {
+      const term = historySearchTerm.toLowerCase()
+      filtered = filtered.filter(item => 
+        (item.nom && item.nom.toLowerCase().includes(term)) ||
+        (item.prenom && item.prenom.toLowerCase().includes(term)) ||
+        (item.numero && item.numero.toLowerCase().includes(term)) ||
+        (item.document_type && item.document_type.toLowerCase().includes(term))
+      )
+    }
+    
+    return filtered
+  }, [historyAll, historyFilterRecordType, historyFilterStatus, historyFilterType, historyFilterDate, historySearchTerm])
+
   const demandeTypeCounts = useMemo(() => {
     const counts = {}
     for (const d of sortedDemandes) {
@@ -125,9 +239,12 @@ export default function AdminDashboard() {
     return sortedDemandes.filter((d) => (d.document_type || 'Autre') === selectedDemandeType)
   }, [sortedDemandes, selectedDemandeType])
 
+  // Filtrer pour ne montrer que les réclamations "En attente" dans le tableau de gestion
   const sortedReclamations = useMemo(() => {
     if (!reclamations) return []
-    return [...reclamations].sort((a, b) => new Date(b.date_reclamation) - new Date(a.date_reclamation))
+    return [...reclamations]
+      .filter(r => r.status === 'En attente') // Seulement les réclamations en attente
+      .sort((a, b) => new Date(b.date_reclamation) - new Date(a.date_reclamation))
   }, [reclamations])
 
   const reclamationTypeCounts = useMemo(() => {
@@ -155,32 +272,66 @@ export default function AdminDashboard() {
     'flex flex-col items-center justify-center gap-0.5 h-10 w-[92px] rounded-xl text-[10px] font-semibold transition-colors'
   const actionIconClass = 'w-3.5 h-3.5'
 
+  const [actionMessage, setActionMessage] = useState(null)
+
   const updateDemandeMutation = useMutation({
     mutationFn: ({ id, status, justification }) => demandeService.updateStatus(id, status, justification),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries(['demandes'])
       queryClient.invalidateQueries(['adminStats'])
       setSelectedDemande(null)
       setJustification('')
+      
+      // Afficher un message de succès selon l'action
+      if (variables.status === 'Acceptée') {
+        setActionMessage({ type: 'success', text: 'Demande acceptée. Le document sera généré et envoyé par email automatiquement.' })
+        setTimeout(() => setActionMessage(null), 5000)
+      } else if (variables.status === 'Refusée') {
+        setActionMessage({ type: 'success', text: 'Demande refusée. L\'étudiant a été notifié par email.' })
+        setTimeout(() => setActionMessage(null), 5000)
+      }
     },
     onError: (error) => {
       console.error('Error updating demande:', error)
-      alert('Erreur: ' + (error.response?.data?.error || error.response?.data?.message || error.message))
+      setActionMessage({ type: 'error', text: 'Erreur: ' + (error.response?.data?.error || error.response?.data?.message || error.message) })
+      setTimeout(() => setActionMessage(null), 5000)
     },
   })
 
   const sendDemandeEmailMutation = useMutation({
-    mutationFn: (demandeId) => demandeService.sendEmailWithDocument(demandeId),
+    mutationFn: (demandeId) => {
+      console.log('🔄 Tentative d\'envoi d\'email pour demande ID:', demandeId)
+      if (!demandeId) {
+        console.error('❌ Erreur: demandeId est vide ou undefined')
+        throw new Error('ID de demande manquant')
+      }
+      return demandeService.sendEmailWithDocument(demandeId)
+    },
     onMutate: (demandeId) => {
       setSendingDemandeEmailId(demandeId)
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['demandes'])
-      alert('Email envoyé avec succès.')
+    onSuccess: (data) => {
+      console.log('✅ Réponse API reçue:', data)
+      // Vérifier que l'email a réellement été envoyé
+      if (data && data.success === true) {
+        queryClient.invalidateQueries(['demandes'])
+        alert('Email envoyé avec succès.')
+      } else {
+        // Si success n'est pas true, c'est une erreur
+        const errorMsg = data?.message || data?.error || 'L\'email n\'a pas pu être envoyé'
+        console.error('❌ Erreur dans la réponse:', data)
+        alert('Erreur: ' + errorMsg)
+      }
     },
     onError: (error) => {
-      console.error('Error sending email:', error)
-      alert('Erreur email: ' + (error.response?.data?.error || error.response?.data?.message || error.message))
+      console.error('❌ Erreur lors de l\'envoi d\'email:', error)
+      console.error('❌ Détails de l\'erreur:', {
+        response: error.response?.data,
+        status: error.response?.status,
+        message: error.message
+      })
+      const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Erreur inconnue lors de l\'envoi de l\'email'
+      alert('Erreur email: ' + errorMsg)
     },
     onSettled: () => {
       setSendingDemandeEmailId(null)
@@ -207,6 +358,71 @@ export default function AdminDashboard() {
       alert('Impossible de consulter le document: ' + (apiMsg || error.message))
     } finally {
       setGeneratingDemandeId(null)
+    }
+  }
+
+  // Fonction pour ouvrir le document d'une réclamation
+  const handleViewReclamationDocument = async (reclamation) => {
+    try {
+      // Trouver la demande associée à cette réclamation
+      const numeroReclame = reclamation.numero_attestation_reclamee || reclamation.numero_demande_reclamee
+      if (!numeroReclame) {
+        alert('Impossible de trouver le document associé à cette réclamation')
+        return
+      }
+      
+      // Chercher la demande correspondante
+      const allDemandes = await demandeService.getAll()
+      const demandeAssociee = allDemandes.find(d => 
+        d.numero_attestation === numeroReclame || 
+        d.numero_demande === numeroReclame
+      )
+      
+      if (!demandeAssociee) {
+        alert('Document non trouvé pour cette réclamation')
+        return
+      }
+      
+      // Si pas encore généré, générer d'abord
+      if (!demandeAssociee.document_path) {
+        setGeneratingDemandeId(demandeAssociee.id)
+        await demandeService.generateDocument(demandeAssociee.id)
+        await queryClient.invalidateQueries(['demandes'])
+        const updatedDemandes = await demandeService.getAll()
+        const updatedDemande = updatedDemandes.find(d => d.id === demandeAssociee.id)
+        setReclamationDocument({
+          reclamation: reclamation,
+          demande: updatedDemande || demandeAssociee
+        })
+      } else {
+        setReclamationDocument({
+          reclamation: reclamation,
+          demande: demandeAssociee
+        })
+      }
+    } catch (error) {
+      console.error('Error viewing reclamation document:', error)
+      const apiMsg = error?.response?.data?.message || error?.response?.data?.error
+      alert('Impossible de consulter le document: ' + (apiMsg || error.message))
+    } finally {
+      setGeneratingDemandeId(null)
+    }
+  }
+
+  // Fonction pour ouvrir le document depuis l'historique
+  const handleViewHistoryDocument = async (item) => {
+    if (item.type === 'demande') {
+      // Pour une demande, utiliser handleConsultDemande
+      const demande = demandes?.find(d => d.id === item.id)
+      if (demande) {
+        await handleConsultDemande(demande)
+      }
+    } else if (item.type === 'reclamation') {
+      // Pour une réclamation, utiliser handleViewReclamationDocument
+      const reclamation = reclamations?.find(r => r.id === item.id)
+      if (reclamation) {
+        await handleViewReclamationDocument(reclamation)
+      }
     }
   }
 
@@ -281,10 +497,40 @@ export default function AdminDashboard() {
     resendReclamationMutation.isPending ||
     closeReclamationMutation.isPending
 
+  // Fonction pour obtenir le badge de statut
+  const getStatusBadge = (status) => {
+    const badges = {
+      'En attente': { color: 'bg-yellow-100 text-yellow-800', label: 'En attente' },
+      'Acceptée': { color: 'bg-green-100 text-green-800', label: 'Acceptée' },
+      'Traitée': { color: 'bg-blue-100 text-blue-800', label: 'Traitée' },
+      'Refusée': { color: 'bg-red-100 text-red-800', label: 'Refusée' },
+      'Rejetée': { color: 'bg-red-100 text-red-800', label: 'Rejetée' },
+      'En cours': { color: 'bg-blue-100 text-blue-800', label: 'En cours' },
+      'Résolue': { color: 'bg-green-100 text-green-800', label: 'Résolue' },
+      'Fermée': { color: 'bg-gray-100 text-gray-800', label: 'Fermée' },
+      'Ouverte': { color: 'bg-yellow-100 text-yellow-800', label: 'Ouverte' }
+    }
+    const badge = badges[status] || { color: 'bg-gray-100 text-gray-800', label: status || 'Inconnu' }
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.color}`}>
+        {badge.label}
+      </span>
+    )
+  }
+
   if (isLoading) return <LoadingPage />
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-indigo-50/60 to-slate-50">
+      {/* Message de feedback pour les actions */}
+      {actionMessage && (
+        <div className={`fixed top-20 right-4 z-50 px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 ${
+          actionMessage.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        }`}>
+          <span>{actionMessage.text}</span>
+          <button onClick={() => setActionMessage(null)} className="text-white hover:text-gray-200">×</button>
+        </div>
+      )}
       {/* Background pro (texture subtile) */}
       <div
         className="pointer-events-none fixed inset-0 opacity-[0.05]"
@@ -334,27 +580,46 @@ export default function AdminDashboard() {
               </div>
 
             <div className="flex items-center gap-3 relative">
-              {/* History hover */}
-              <div
-                className="relative"
-                onMouseEnter={() => {
-                  if (historyButtonRef.current) {
-                    const rect = historyButtonRef.current.getBoundingClientRect()
-                    setHistoryPosition({
-                      top: rect.bottom + 8,
-                      right: window.innerWidth - rect.right
-                    })
-                  }
-                  setHistoryOpen(true)
-                }}
-                onMouseLeave={() => setHistoryOpen(false)}
-              >
+              {/* Navigation par onglets */}
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
                 <button
-                  ref={historyButtonRef}
-                  onClick={() => navigate('/admin/history')}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  onClick={() => setActivePage('home')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    activePage === 'home'
+                      ? 'bg-white text-blue-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
                 >
-                  <HistoryIcon className="w-4 h-4" />
+                  Accueil
+                </button>
+                <button
+                  onClick={() => setActivePage('demandes')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    activePage === 'demandes'
+                      ? 'bg-white text-blue-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Demandes
+                </button>
+                <button
+                  onClick={() => setActivePage('reclamations')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    activePage === 'reclamations'
+                      ? 'bg-white text-blue-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Réclamations
+                </button>
+                <button
+                  onClick={() => setActivePage('historique')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    activePage === 'historique'
+                      ? 'bg-white text-blue-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
                   Historique
                 </button>
               </div>
@@ -437,6 +702,9 @@ export default function AdminDashboard() {
 
       <main className="flex-1 max-w-screen-2xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+          {/* Page Home - Statistiques */}
+          {activePage === 'home' && (
+            <div>
           {/* Stats Cards - Design Professionnel Clair */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <StatCard
@@ -471,7 +739,76 @@ export default function AdminDashboard() {
 
           {/* Deux sections en parallèle (Demandes / Réclamations) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Demandes */}
+                {/* Demandes en attente - Aperçu */}
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+                  className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-200 hover:border-blue-500/70 hover:shadow-[0_0_0_1px_rgba(37,99,235,0.55),0_0_26px_rgba(37,99,235,0.35),0_0_64px_rgba(99,102,241,0.18)]"
+                >
+                  <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-5 h-5" />
+                        <h3 className="text-lg font-bold">Demandes en attente</h3>
+                      </div>
+                      <div className="text-lg font-semibold">{filteredDemandes.length}</div>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <p className="text-sm text-gray-600 mb-4">
+                      {filteredDemandes.length > 0 
+                        ? `${filteredDemandes.length} demande(s) nécessitent votre attention`
+                        : 'Aucune demande en attente'}
+                    </p>
+                    <button
+                      onClick={() => setActivePage('demandes')}
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                    >
+                      Voir toutes les demandes
+                    </button>
+                  </div>
+                </motion.div>
+
+                {/* Réclamations en attente - Aperçu */}
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+                  className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-200 hover:border-indigo-500/70 hover:shadow-[0_0_0_1px_rgba(99,102,241,0.55),0_0_26px_rgba(99,102,241,0.35),0_0_64px_rgba(212,175,55,0.14)]"
+                >
+                  <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="w-5 h-5" />
+                        <h3 className="text-lg font-bold">Réclamations en attente</h3>
+                      </div>
+                      <div className="text-lg font-semibold">{filteredReclamations.length}</div>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <p className="text-sm text-gray-600 mb-4">
+                      {filteredReclamations.length > 0 
+                        ? `${filteredReclamations.length} réclamation(s) nécessitent votre attention`
+                        : 'Aucune réclamation en attente'}
+                    </p>
+                    <button
+                      onClick={() => setActivePage('reclamations')}
+                      className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+                    >
+                      Voir toutes les réclamations
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            </div>
+          )}
+
+          {/* Page Demandes */}
+          {activePage === 'demandes' && (
+            <div>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Gestion des Demandes</h2>
+                <p className="text-sm text-gray-600 mt-1">Gérez les demandes en attente</p>
+              </div>
             <motion.div
               whileHover={{ scale: 1.02 }}
               transition={{ type: 'spring', stiffness: 320, damping: 24 }}
@@ -481,7 +818,7 @@ export default function AdminDashboard() {
               <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <FileText className="w-5 h-5 text-blue-700" />
-                  <h3 className="text-lg font-bold text-gray-900">Gestion des Demandes</h3>
+                    <h3 className="text-lg font-bold text-gray-900">Demandes en attente</h3>
                 </div>
                 <div className="text-sm font-semibold text-gray-700">{filteredDemandes.length}</div>
               </div>
@@ -616,11 +953,12 @@ export default function AdminDashboard() {
                                 Détails
                               </button>
                               <button
-                                onClick={() => updateDemandeMutation.mutate({ id: d.id, status: 'Acceptée', justification: null })}
-                                className={`${actionBtnBase} bg-blue-600 text-white hover:bg-blue-700`}
-                              >
-                                <CheckCircle className={actionIconClass} />
-                                Accepter
+                                  onClick={() => updateDemandeMutation.mutate({ id: d.id, status: 'Acceptée', justification: null })}
+                                  disabled={updateDemandeMutation.isPending}
+                                  className={`${actionBtnBase} bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed`}
+                                >
+                                  <CheckCircle className={actionIconClass} />
+                                  {updateDemandeMutation.isPending ? '...' : 'Accepter'}
                               </button>
                               <button
                                 onClick={() => { setSelectedDemande(d); setJustification('') }}
@@ -631,9 +969,8 @@ export default function AdminDashboard() {
                               </button>
                             </div>
                           )}
-
-                          {(d.status === 'Acceptée' || d.status === 'Traitée') && (
-                            <div className="flex flex-wrap items-start gap-1 min-w-[310px]">
+                          {d.status === 'Acceptée' && (
+                            <div className="flex flex-wrap items-start gap-1 min-w-[200px]">
                               <button
                                 onClick={() => setViewDemande(d)}
                                 className={`${actionBtnBase} bg-gray-100 text-gray-800 hover:bg-gray-200`}
@@ -643,44 +980,11 @@ export default function AdminDashboard() {
                               </button>
                               <button
                                 onClick={() => handleConsultDemande(d)}
-                                disabled={generatingDemandeId === d.id}
-                                className={`${actionBtnBase} bg-gray-900 text-white hover:bg-black disabled:opacity-70 disabled:cursor-not-allowed`}
+                                className={`${actionBtnBase} bg-indigo-600 text-white hover:bg-indigo-700`}
                               >
-                                <CheckCircle className={actionIconClass} />
-                                {generatingDemandeId === d.id ? 'Génération...' : 'Consulter'}
+                                <FileText className={actionIconClass} />
+                                Consulter
                               </button>
-                              <button
-                                onClick={() => sendDemandeEmailMutation.mutate(d.id)}
-                                disabled={sendingDemandeEmailId === d.id || d.email_sent == 1 || !!d.email_sent_at}
-                                className={`${actionBtnBase} ${
-                                  d.email_sent == 1 || !!d.email_sent_at
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                                } disabled:opacity-70 disabled:cursor-not-allowed`}
-                              >
-                                <Mail className={actionIconClass} />
-                                {sendingDemandeEmailId === d.id
-                                  ? 'Envoi...'
-                                  : (d.email_sent == 1 || !!d.email_sent_at)
-                                  ? 'Envoyée'
-                                  : 'Envoyer'}
-                              </button>
-                            </div>
-                          )}
-
-                          {d.status === 'Refusée' && (
-                            <div className="flex flex-wrap items-start gap-1 min-w-[310px]">
-                              <button
-                                onClick={() => setViewDemande(d)}
-                                className={`${actionBtnBase} bg-gray-100 text-gray-800 hover:bg-gray-200`}
-                              >
-                                <Eye className={actionIconClass} />
-                                Détails
-                              </button>
-                              <div className="text-xs text-gray-600 mt-1">
-                                <span className="font-semibold">Motif:</span>{' '}
-                                {d.justification_refus || '—'}
-                              </div>
                             </div>
                           )}
                         </td>
@@ -688,15 +992,23 @@ export default function AdminDashboard() {
                     ))}
                     {sortedDemandes.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-10 text-center text-gray-500">Aucune demande</td>
+                          <td colSpan={4} className="px-6 py-10 text-center text-gray-500">Aucune demande en attente</td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
             </motion.div>
+            </div>
+          )}
 
-            {/* Réclamations */}
+          {/* Page Réclamations */}
+          {activePage === 'reclamations' && (
+            <div>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Gestion des Réclamations</h2>
+                <p className="text-sm text-gray-600 mt-1">Gérez les réclamations en attente</p>
+              </div>
           <motion.div
               whileHover={{ scale: 1.02 }}
               transition={{ type: 'spring', stiffness: 320, damping: 24 }}
@@ -705,7 +1017,7 @@ export default function AdminDashboard() {
               <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-indigo-700" />
-                  <h3 className="text-lg font-bold text-gray-900">Gestion des Réclamations</h3>
+                    <h3 className="text-lg font-bold text-gray-900">Réclamations en attente</h3>
                 </div>
                 <div className="text-sm font-semibold text-gray-700">{filteredReclamations.length}</div>
               </div>
@@ -838,59 +1150,12 @@ export default function AdminDashboard() {
                           <div className="text-xs text-gray-500">
                             {r.numero_attestation_reclamee || r.numero_demande_reclamee || ''}
                           </div>
-                          {r.demande_id && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                // Forcer l'affichage de toutes les demandes pour maximiser les chances de trouver la ligne
-                                setSelectedDemandeType('Tous')
-
-                                setTimeout(() => {
-                                  // Essayer d'abord avec la ref, sinon chercher directement dans le DOM
-                                  let rowEl = demandeRowRefs.current[r.demande_id]
-                                  if (!rowEl) {
-                                    rowEl = document.querySelector(
-                                      `[data-demande-id=\"${r.demande_id}\"]`
-                                    )
-                                  }
-                                  if (rowEl && demandesSectionRef.current) {
-                                    // Scroll vers la section des demandes puis centrer la ligne de la demande liée
-                                    demandesSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                                    setTimeout(() => {
-                                      rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                                      setHighlightedDemandeId(r.demande_id)
-                                      setTimeout(() => setHighlightedDemandeId(null), 2500)
-                                    }, 400)
-                                  } else {
-                                    alert("Demande liée non trouvée dans la liste actuelle.")
-                                  }
-                                }, 400)
-                              }}
-                              className="mt-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
-                            >
-                              Voir la demande liée
-                            </button>
-                          )}
                         </td>
-                        <td className="px-6 py-3 text-gray-700">
-                          {r.status === 'Rejetée' ? (
-                            <div>
-                              <div className="font-medium text-red-600">{r.status}</div>
-                              {r.reponse_admin || r.reponse ? (
-                                <div className="mt-1 text-xs text-gray-600">
-                                  <div className="font-semibold">Motif:</div>
-                                  <div className="mt-0.5">{r.reponse_admin || r.reponse}</div>
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : (
-                            r.status
-                          )}
-                        </td>
+                          <td className="px-6 py-3 text-gray-700">{r.status}</td>
                         <td className="px-6 py-3">
                           {/* Actions adaptatives */}
                           {(r.status === 'En attente' || r.status === 'En cours') && (
-                            <div className="flex flex-wrap items-start gap-1 min-w-[360px]">
+                            <div className="flex flex-wrap items-start gap-1 min-w-[450px]">
                               <button
                                 onClick={() => setViewReclamation(r)}
                                 disabled={reclamationActionLoading}
@@ -898,6 +1163,14 @@ export default function AdminDashboard() {
                               >
                                 <Eye className={actionIconClass} />
                                 Voir
+                              </button>
+                              <button
+                                onClick={() => handleViewReclamationDocument(r)}
+                                disabled={reclamationActionLoading || generatingDemandeId}
+                                className={`${actionBtnBase} bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed`}
+                              >
+                                <FileText className={actionIconClass} />
+                                Document
                               </button>
                               <button
                                 onClick={() => { setSelectedReclamation(r); setReponse('') }}
@@ -915,116 +1188,271 @@ export default function AdminDashboard() {
                                 <Ban className={actionIconClass} />
                                 Rejeter
                               </button>
-                              <button
-                                onClick={async () => {
-                                  // Récupérer le document de la demande associée
-                                  if (r.demande_id) {
-                                    try {
-                                      const demande = demandes?.find(d => d.id === r.demande_id)
-                                      if (demande) {
-                                        // Si pas encore généré, générer d'abord
-                                        if (!demande.document_path) {
-                                          await demandeService.generateDocument(demande.id)
-                                          await queryClient.invalidateQueries(['demandes'])
-                                          const updatedDemandes = await demandeService.getAll()
-                                          const updatedDemande = updatedDemandes.find(d => d.id === r.demande_id)
-                                          setReclamationDocument({ reclamation: r, demande: updatedDemande || demande })
-                                        } else {
-                                          setReclamationDocument({ reclamation: r, demande })
-                                        }
-                                      } else {
-                                        alert('Document non trouvé pour cette réclamation.')
-                                      }
-                                    } catch (error) {
-                                      console.error('Error loading document:', error)
-                                      alert('Erreur lors du chargement du document.')
-                                    }
-                                  } else {
-                                    alert('Aucun document associé à cette réclamation.')
-                                  }
-                                }}
-                                disabled={reclamationActionLoading}
-                                className={`${actionBtnBase} bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed`}
-                              >
-                                <FileText className={actionIconClass} />
-                                Consulter
-                              </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {sortedReclamations.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-10 text-center text-gray-500">Aucune réclamation en attente</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
             </div>
-                          )}
+          )}
 
-                          {(r.status === 'Résolue' || r.status === 'Fermée') && (
-                            <div className="flex flex-wrap items-start gap-1 min-w-[360px]">
-                              <button
-                                onClick={() => setViewReclamation(r)}
-                                disabled={reclamationActionLoading}
-                                className={`${actionBtnBase} bg-gray-100 text-gray-800 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-                              >
-                                <Eye className={actionIconClass} />
-                                Voir
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  // Récupérer le document de la demande associée
-                                  if (r.demande_id) {
-                                    try {
-                                      const demande = demandes?.find(d => d.id === r.demande_id)
-                                      if (demande) {
-                                        // Si pas encore généré, générer d'abord
-                                        if (!demande.document_path) {
-                                          await demandeService.generateDocument(demande.id)
-                                          await queryClient.invalidateQueries(['demandes'])
-                                          const updatedDemandes = await demandeService.getAll()
-                                          const updatedDemande = updatedDemandes.find(d => d.id === r.demande_id)
-                                          setReclamationDocument({ reclamation: r, demande: updatedDemande || demande })
-                                        } else {
-                                          setReclamationDocument({ reclamation: r, demande })
-                                        }
-                                      } else {
-                                        alert('Document non trouvé pour cette réclamation.')
-                                      }
-                                    } catch (error) {
-                                      console.error('Error loading document:', error)
-                                      alert('Erreur lors du chargement du document.')
-                                    }
-                                  } else {
-                                    alert('Aucun document associé à cette réclamation.')
-                                  }
-                                }}
-                                disabled={reclamationActionLoading}
-                                className={`${actionBtnBase} bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed`}
-                              >
-                                <FileText className={actionIconClass} />
-                                Consulter
-                              </button>
+          {/* Page Historique - Avec filtres */}
+          {activePage === 'historique' && (
+            <div>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Historique Complet</h2>
+                <p className="text-sm text-gray-600 mt-1">Consultez l'historique complet des demandes et réclamations</p>
+              </div>
+
+              {/* Filtre de recherche en haut */}
+              <div className="mb-6">
+                <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg p-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={historySearchTerm}
+                      onChange={(e) => setHistorySearchTerm(e.target.value)}
+                      placeholder="Rechercher par nom, ID, type de document..."
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    />
                   </div>
-                          )}
+                </div>
+              </div>
 
-                          {r.status === 'Rejetée' && (
-                            <div className="flex flex-wrap items-start gap-1">
-                              <button
-                                onClick={() => setViewReclamation(r)}
-                                disabled={reclamationActionLoading}
-                                className={`${actionBtnBase} bg-gray-100 text-gray-800 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-                              >
-                                <Eye className={actionIconClass} />
-                                Voir
-                              </button>
-                            </div>
-                          )}
-                        </td>
+              {/* Bouton pour ouvrir/fermer les filtres */}
+              <div className="mb-4 flex items-center justify-between">
+                <button
+                  onClick={() => setHistoryFiltersOpen(!historyFiltersOpen)}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/95 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200 hover:bg-gray-50 transition-colors"
+                >
+                  <Filter className="w-4 h-4 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-700">
+                    {historyFiltersOpen ? 'Masquer les filtres' : 'Afficher les filtres'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Filtres horizontaux */}
+              {historyFiltersOpen && (
+                <div className="mb-6 bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg p-4">
+                  <div className="flex flex-wrap items-center gap-4">
+                  {/* Type d'enregistrement */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700">Type:</span>
+                    <div className="flex gap-2">
+                      {['Tous', 'demande', 'reclamation'].map((type) => {
+                        const isActive = historyFilterRecordType === type
+                        const label = type === 'Tous' ? 'Tous' : type === 'demande' ? 'Demandes' : 'Réclamations'
+                        const IconComponent = type === 'demande' ? FileText : type === 'reclamation' ? MessageSquare : null
+                        return (
+                          <button
+                            key={type}
+                            onClick={() => setHistoryFilterRecordType(type)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all inline-flex items-center gap-1.5 ${
+                              isActive
+                                ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                            }`}
+                          >
+                            {IconComponent && <IconComponent className="w-3 h-3" />}
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Statut */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700">Statut:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {historyStatuses.slice(0, 6).map((status) => {
+                        const isActive = historyFilterStatus === status
+                        return (
+                          <button
+                            key={status}
+                            onClick={() => setHistoryFilterStatus(status)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                              isActive
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                            }`}
+                          >
+                            {status}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Type de document */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700">Document:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {historyDocumentTypes.slice(0, 5).map((type) => {
+                        const isActive = historyFilterType === type
+                        return (
+                          <button
+                            key={type}
+                            onClick={() => setHistoryFilterType(type)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                              isActive
+                                ? 'bg-purple-600 text-white border-purple-600 shadow-md'
+                                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                            }`}
+                          >
+                            {type}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Date */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700">Date:</span>
+                    <input
+                      type="date"
+                      value={historyFilterDate}
+                      onChange={(e) => setHistoryFilterDate(e.target.value)}
+                      className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs"
+                    />
+                  </div>
+
+                  {/* Bouton réinitialiser */}
+                  <button
+                    onClick={() => {
+                      setHistorySearchTerm('')
+                      setHistoryFilterStatus('Tous')
+                      setHistoryFilterType('Tous')
+                      setHistoryFilterDate('')
+                      setHistoryFilterRecordType('Tous')
+                    }}
+                    className="ml-auto px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 underline"
+                  >
+                    Réinitialiser
+                  </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Table */}
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden">
+                    <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                      <p className="text-sm text-gray-600">
+                        <span className="font-semibold">{filteredHistory.length}</span> enregistrement(s) trouvé(s)
+                      </p>
+                    </div>
+                    
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Type</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">ID</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Étudiant</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Document</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Statut</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Justification/Réponse</th>
                       </tr>
-                    ))}
-                    {sortedReclamations.length === 0 && (
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {filteredHistory.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-6 py-10 text-center text-gray-500">Aucune réclamation</td>
+                              <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                                Aucun enregistrement trouvé avec ces critères
+                              </td>
                       </tr>
+                          ) : (
+                            filteredHistory.map((item, index) => (
+                              <motion.tr
+                                key={`${item.type}-${item.id}`}
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: index * 0.02 }}
+                                className="hover:bg-gray-50 transition-colors"
+                              >
+                                <td className="px-6 py-4">
+                                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
+                                    item.type === 'demande' 
+                                      ? 'bg-blue-100 text-blue-700' 
+                                      : 'bg-purple-100 text-purple-700'
+                                  }`}>
+                                    {item.type === 'demande' ? (
+                                      <FileText className="w-3 h-3" />
+                                    ) : (
+                                      <MessageSquare className="w-3 h-3" />
+                                    )}
+                                    {item.type === 'demande' ? 'Demande' : 'Réclamation'}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 text-sm font-medium text-gray-900">#{item.id}</td>
+                                <td className="px-6 py-4 text-sm text-gray-700">
+                                  {item.nom} {item.prenom}
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-700">{item.document_type || 'N/A'}</td>
+                                <td className="px-6 py-4 text-sm text-gray-600">
+                                  {new Date(item.date).toLocaleDateString('fr-FR', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </td>
+                                <td className="px-6 py-4">{getStatusBadge(item.status)}</td>
+                                <td className="px-6 py-4 text-sm text-gray-600">
+                                  {item.justification ? (
+                                    <span className="text-red-600 italic">{item.justification}</span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4">
+                                  {/* Bouton Voir document (seulement pour les demandes avec document_path) */}
+                                  {item.type === 'demande' && (
+                                    <button
+                                      onClick={() => handleViewHistoryDocument(item)}
+                                      disabled={generatingDemandeId}
+                                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                    >
+                                      <FileText className="w-3 h-3" />
+                                      Voir document
+                                    </button>
+                                  )}
+                                  {item.type === 'reclamation' && (
+                                    <button
+                                      onClick={() => handleViewHistoryDocument(item)}
+                                      disabled={generatingDemandeId}
+                                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                    >
+                                      <FileText className="w-3 h-3" />
+                                      Voir document
+                                    </button>
+                                  )}
+                                </td>
+                              </motion.tr>
+                            ))
                     )}
                   </tbody>
                 </table>
               </div>
-            </motion.div>
+            </div>
           </div>
+          )}
 
+          {/* Modals (toujours visibles quelle que soit la page) */}
           {/* Modal Refus Demande */}
           {selectedDemande && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1230,8 +1658,21 @@ export default function AdminDashboard() {
                   </button>
                   <button
                     onClick={() => {
-                      sendDemandeEmailMutation.mutate(demandeDocument.id)
-                      setDemandeDocument(null)
+                      console.log('🔵 Bouton "Envoyer email" cliqué pour demande ID:', demandeDocument.id)
+                      if (!demandeDocument || !demandeDocument.id) {
+                        console.error('❌ Erreur: demandeDocument ou ID manquant', demandeDocument)
+                        alert('Erreur: Impossible de trouver l\'ID de la demande')
+                        return
+                      }
+                      sendDemandeEmailMutation.mutate(demandeDocument.id, {
+                        onSuccess: () => {
+                          // Fermer la modal seulement après succès
+                          setDemandeDocument(null)
+                        },
+                        onError: () => {
+                          // Ne pas fermer la modal en cas d'erreur pour voir le message
+                        }
+                      })
                     }}
                     disabled={sendDemandeEmailMutation.isPending || demandeDocument.email_sent == 1}
                     className="px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"

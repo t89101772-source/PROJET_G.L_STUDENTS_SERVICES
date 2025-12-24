@@ -94,7 +94,9 @@ if (strpos($path, '/api/') === 0 || $path === '/api') {
             break;
 
         case 'send-email-document':
+                error_log("Router - send-email-document: Route trouvée, inclusion du fichier");
                 require_once __DIR__ . '/api/send_email_document.php';
+                exit; // Important: exit après l'inclusion pour éviter d'exécuter le code suivant
                 break;
 
             case 'generate-document':
@@ -113,6 +115,10 @@ if (strpos($path, '/api/') === 0 || $path === '/api') {
 
             case 'annees':
                 require_once __DIR__ . '/api/annees.php';
+                break;
+
+            case 'validate-student':
+                require_once __DIR__ . '/api/validate_student.php';
                 break;
 
             default:

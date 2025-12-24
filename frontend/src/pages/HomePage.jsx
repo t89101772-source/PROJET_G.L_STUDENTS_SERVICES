@@ -9,6 +9,7 @@ import {
   CheckCircle, 
   Clock, 
   XCircle,
+  X,
   Mail,
   AlertCircle,
   Info
@@ -38,6 +39,9 @@ export default function HomePage() {
   const [errors, setErrors] = useState({})
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [isValidated, setIsValidated] = useState(false) // État pour savoir si l'étudiant est validé
+  const [validating, setValidating] = useState(false) // État pour le chargement de la validation
+  const [validationError, setValidationError] = useState(null) // Erreur de validation
   const [suiviData, setSuiviData] = useState(null)
   const [suiviLoading, setSuiviLoading] = useState(false)
   const [suiviError, setSuiviError] = useState(null)
@@ -119,15 +123,27 @@ export default function HomePage() {
       value: 'Convention de stage', 
       label: 'Convention de stage', 
       fields: [
+        // Type de stage
         { name: 'type_stage', label: 'Type de stage', type: 'select', options: [
           { value: '', label: 'Sélectionnez le type' },
           { value: 'PFA', label: 'PFA (Projet de Fin d\'Année) - 4ème année' },
           { value: 'PFE', label: 'PFE (Projet de Fin d\'Études) - 5ème année' }
         ], placeholder: 'Sélectionnez le type', required: true },
+        
+        // Informations entreprise
         { name: 'nom_entreprise', label: 'Nom de l\'entreprise', type: 'text', placeholder: 'Nom de l\'entreprise', required: true },
         { name: 'adresse_entreprise', label: 'Adresse de l\'entreprise', type: 'text', placeholder: 'Adresse complète de l\'entreprise', required: true },
-        { name: 'encadrant', label: 'Encadrant', type: 'text', placeholder: 'Nom du professeur encadrant', required: true },
-        { name: 'duree_stage', label: 'Durée du stage (en mois)', type: 'text', placeholder: 'Ex: 2 mois pour PFA, 4 mois pour PFE', required: true }
+        { name: 'tel_entreprise', label: 'Téléphone de l\'entreprise', type: 'tel', placeholder: 'Ex: +212 5 39 68 80 27', required: true },
+        { name: 'email_entreprise', label: 'Email de l\'entreprise', type: 'email', placeholder: 'email@entreprise.com', required: true },
+        { name: 'representant_entreprise', label: 'Représentant de l\'entreprise', type: 'text', placeholder: 'Nom du représentant', required: true },
+        { name: 'qualite_representant', label: 'Qualité du représentant', type: 'text', placeholder: 'Ex: Directeur, Responsable RH, etc.', required: true },
+        
+        // Informations stage
+        { name: 'date_debut', label: 'Date de début du stage', type: 'date', placeholder: 'Date de début', required: true },
+        { name: 'date_fin', label: 'Date de fin du stage', type: 'date', placeholder: 'Date de fin', required: true },
+        { name: 'encadrant', label: 'Encadrant (entreprise)', type: 'text', placeholder: 'Nom de l\'encadrant dans l\'entreprise', required: true },
+        { name: 'tuteur', label: 'Tuteur pédagogique (école)', type: 'text', placeholder: 'Nom du tuteur pédagogique', required: true },
+        { name: 'theme_stage', label: 'Thème du stage', type: 'textarea', placeholder: 'Décrivez le thème/sujet du stage', required: true }
       ]
     },
     { value: 'Réclamation', label: 'Réclamation', fields: [] }
@@ -180,6 +196,43 @@ export default function HomePage() {
     return newErrors
   }
 
+  // Validation de l'étudiant (email, CIN, apogee) avant d'accéder au formulaire
+  const handleValidate = async (e) => {
+    e.preventDefault()
+    setValidationError(null)
+    setErrors({})
+    
+    // Validation basique des champs
+    if (!formData.email || !formData.apogee_number || !formData.cin) {
+      setValidationError('Veuillez remplir tous les champs (email, numéro Apogée, CIN)')
+      return
+    }
+    
+    setValidating(true)
+    
+    try {
+      const response = await demandeService.validateStudent(
+        formData.email,
+        formData.apogee_number,
+        formData.cin
+      )
+      
+      if (response.valid) {
+        setIsValidated(true)
+        setValidationError(null)
+      } else {
+        setValidationError(response.message || 'Validation échouée')
+      }
+    } catch (error) {
+      setValidationError(
+        error?.response?.data?.message || 
+        'Erreur lors de la validation. Vérifiez vos informations.'
+      )
+    } finally {
+      setValidating(false)
+    }
+  }
+
   // Soumission du formulaire
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -204,18 +257,21 @@ export default function HomePage() {
         })
         
         setSuccess(true)
+        // Réinitialiser immédiatement le formulaire et la validation
+        setFormData({
+          email: '',
+          apogee_number: '',
+          cin: '',
+          document_type: '',
+          numero_attestation: '',
+          description: '',
+          additional_info: {}
+        })
+        setIsValidated(false)
+        setErrors({})
+        // Masquer le message de succès après 3 secondes
         setTimeout(() => {
           setSuccess(false)
-          setFormData({
-            email: '',
-            apogee_number: '',
-            cin: '',
-            document_type: '',
-            numero_attestation: '',
-            description: '',
-            additional_info: {}
-          })
-          setErrors({})
         }, 3000)
         setLoading(false)
         return
@@ -232,18 +288,21 @@ export default function HomePage() {
       const response = await demandeService.create(dataToSend)
       
       setSuccess(true)
+      // Réinitialiser immédiatement le formulaire et la validation
+      setFormData({
+        email: '',
+        apogee_number: '',
+        cin: '',
+        document_type: '',
+        numero_attestation: '',
+        description: '',
+        additional_info: {}
+      })
+      setIsValidated(false)
+      setErrors({})
+      // Masquer le message de succès après 3 secondes
       setTimeout(() => {
         setSuccess(false)
-        setFormData({
-          email: '',
-          apogee_number: '',
-          cin: '',
-          document_type: '',
-          numero_demande: '',
-          description: '',
-          additional_info: {}
-        })
-        setErrors({})
       }, 3000)
     } catch (error) {
       setErrors({ 
@@ -728,271 +787,330 @@ export default function HomePage() {
                 <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Demande créée avec succès !</h3>
                 <p className="text-sm text-gray-600">Vous recevrez un email avec le numéro de demande</p>
+                <button
+                  onClick={() => {
+                    setSuccess(false)
+                    setIsValidated(false)
+                    setFormData({
+                      email: '',
+                      apogee_number: '',
+                      cin: '',
+                      document_type: '',
+                      numero_attestation: '',
+                      description: '',
+                      additional_info: {}
+                    })
+                  }}
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Nouvelle demande
+                </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Email */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                      errors.email ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="votre.email@gmail.com"
-                    required
-                  />
-                  {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
-                </div>
-
-                {/* Numéro Apogée */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Numéro Apogée <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.apogee_number}
-                    onChange={(e) => setFormData({ ...formData, apogee_number: e.target.value.toUpperCase() })}
-                    className={`input-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                      errors.apogee_number ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="A12345"
-                    required
-                  />
-                  {errors.apogee_number && <p className="mt-1 text-sm text-red-600">{errors.apogee_number}</p>}
-                </div>
-
-                {/* CIN */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    CIN <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.cin}
-                    onChange={(e) => setFormData({ ...formData, cin: e.target.value.toUpperCase() })}
-                    className={`input-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                      errors.cin ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="AB123456"
-                    required
-                  />
-                  {errors.cin && <p className="mt-1 text-sm text-red-600">{errors.cin}</p>}
-                </div>
-
-                {/* Type de document */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Choix <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.document_type}
-                    onChange={(e) => setFormData({ 
-                      ...formData, 
-                      document_type: e.target.value, 
-                      additional_info: e.target.value === 'Réclamation' ? { motif: 'Erreur dans le document' } : {},
-                      numero_demande: '',
-                      description: ''
-                    })}
-                    className={`select-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                      errors.document_type ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    required
-                  >
-                    <option value="">Sélectionnez un type</option>
-                    {documentTypes.map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.document_type && <p className="mt-1 text-sm text-red-600">{errors.document_type}</p>}
-                </div>
-
-                {/* Si Réclamation */}
-                <AnimatePresence>
-                  {isReclamation && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="bg-red-50 border-l-4 border-red-400 p-4 rounded-lg space-y-4"
-                    >
-                      <div className="flex items-start gap-2">
-                        <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
-                        <p className="text-sm text-red-700 font-medium">
-                          Pour faire une réclamation, vous devez avoir le numéro de demande reçu par email.
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Numéro d'attestation <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.numero_attestation || ''}
-                          onChange={(e) => setFormData({ ...formData, numero_attestation: e.target.value.toUpperCase() })}
-                          className={`input-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                            errors.numero_attestation ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                          placeholder="ATT-2025-000001"
-                          required
-                        />
-                        {errors.numero_attestation && <p className="mt-1 text-sm text-red-600">{errors.numero_attestation}</p>}
-                        <p className="mt-1 text-xs text-gray-500">Entrez le numéro d'attestation reçu par email</p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Motif de la réclamation <span className="text-gray-400">(Optionnel)</span>
-                        </label>
-                        <select
-                          value={formData.additional_info.motif || ''}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            additional_info: { ...formData.additional_info, motif: e.target.value }
-                          })}
-                          className={`select-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                            errors.motif ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                          required
-                        >
-                          {motifOptions.map((motif) => (
-                            <option key={motif} value={motif}>{motif}</option>
-                          ))}
-                        </select>
-                        {errors.motif && <p className="mt-1 text-sm text-red-600">{errors.motif}</p>}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Description de la réclamation <span className="text-red-500">*</span>
-                        </label>
-                        <textarea
-                          value={formData.description}
-                          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                          rows={4}
-                          className={`textarea-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                            errors.description ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                          placeholder="Décrivez votre réclamation en détail..."
-                          required
-                        />
-                        {errors.description && <p className="mt-1 text-sm text-red-600">{errors.description}</p>}
-                      </div>
-                    </motion.div>
+              // Formulaire avec validation (champs toujours visibles et modifiables)
+              <div className="space-y-5">
+                {/* Section de validation */}
+                <form onSubmit={handleValidate} className="space-y-5">
+                  {!isValidated && (
+                    <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg mb-4">
+                      <p className="text-sm text-blue-700">
+                        <strong>Étape 1 :</strong> Veuillez d'abord valider vos informations pour accéder au formulaire de demande.
+                      </p>
+                    </div>
                   )}
-                </AnimatePresence>
+                  
+                  {/* Email */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Email <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      disabled={validating}
+                      className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                        errors.email ? 'border-red-500' : 'border-gray-300'
+                      } ${validating ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                      placeholder="votre.email@gmail.com"
+                      required
+                    />
+                    {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
+                  </div>
 
-                {/* Champs supplémentaires */}
-                {selectedDocType && selectedDocType.fields && selectedDocType.fields.length > 0 && !isReclamation && (
-                  <div className="bg-gray-50 rounded-xl p-5 space-y-4">
-                    <h3 className="font-semibold text-gray-900">Informations supplémentaires</h3>
-                    {selectedDocType.fields.map((field) => (
-                      <div key={field.name}>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          {field.label} {field.required && <span className="text-red-500">*</span>}
-                        </label>
-                        {field.type === 'textarea' ? (
-                          <textarea
-                            value={formData.additional_info[field.name] || ''}
-                            onChange={(e) => setFormData({
-                              ...formData,
-                              additional_info: { ...formData.additional_info, [field.name]: e.target.value }
-                            })}
-                            className={`textarea-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                              errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                            rows={4}
-                            required={field.required}
-                          />
-                        ) : field.type === 'select' ? (
-                          <select
-                            value={formData.additional_info[field.name] || ''}
-                            onChange={(e) => setFormData({
-                              ...formData,
-                              additional_info: { ...formData.additional_info, [field.name]: e.target.value }
-                            })}
-                            className={`textarea-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                              errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                            required={field.required}
-                            disabled={field.options === 'niveaux' && loadingNiveaux}
-                          >
-                            <option value="">{field.placeholder || 'Sélectionnez...'}</option>
-                            {field.options === 'niveaux' ? (
-                              loadingNiveaux ? (
-                                <option value="">Chargement...</option>
-                              ) : (
-                                niveaux.map((niveau) => (
-                                  <option key={niveau.id} value={niveau.code}>
-                                    {niveau.nom} ({niveau.code})
-                                  </option>
-                                ))
-                              )
-                            ) : field.options === 'annees' ? (
-                              loadingAnnees ? (
-                                <option value="">Chargement...</option>
-                              ) : (
-                                annees.map((annee) => (
-                                  <option key={annee} value={annee}>
-                                    {annee}
-                                  </option>
-                                ))
-                              )
+                  {/* Numéro Apogée */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Numéro Apogée <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.apogee_number}
+                      onChange={(e) => setFormData({ ...formData, apogee_number: e.target.value.toUpperCase() })}
+                      disabled={validating}
+                      className={`input-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                        errors.apogee_number ? 'border-red-500' : 'border-gray-300'
+                      } ${validating ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                      placeholder="A12345"
+                      required
+                    />
+                    {errors.apogee_number && <p className="mt-1 text-sm text-red-600">{errors.apogee_number}</p>}
+                  </div>
+
+                  {/* CIN */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      CIN <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.cin}
+                      onChange={(e) => setFormData({ ...formData, cin: e.target.value.toUpperCase() })}
+                      disabled={validating}
+                      className={`input-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                        errors.cin ? 'border-red-500' : 'border-gray-300'
+                      } ${validating ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                      placeholder="AB123456"
+                      required
+                    />
+                    {errors.cin && <p className="mt-1 text-sm text-red-600">{errors.cin}</p>}
+                  </div>
+
+                  {validationError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <p className="text-sm text-red-700">{validationError}</p>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={validating}
+                    className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {validating ? 'Validation en cours...' : 'Valider mes informations'}
+                  </button>
+                </form>
+
+                {/* Formulaire de demande (affiché seulement si validé) */}
+                {isValidated && (
+                  <form onSubmit={handleSubmit} className="space-y-5 mt-6 pt-6 border-t border-gray-200">
+                    <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-lg mb-4">
+                      <p className="text-sm text-green-700 font-medium">
+                        <strong>✓ Validation réussie</strong>
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">Vous pouvez maintenant choisir votre document</p>
+                    </div>
+
+                    {/* Type de document */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Choix <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={formData.document_type}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          document_type: e.target.value, 
+                          additional_info: e.target.value === 'Réclamation' ? { motif: 'Erreur dans le document' } : {},
+                          numero_demande: '',
+                          description: ''
+                        })}
+                        className={`select-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                          errors.document_type ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                        required
+                      >
+                        <option value="">Sélectionnez un type</option>
+                        {documentTypes.map((type) => (
+                          <option key={type.value} value={type.value}>
+                            {type.label}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.document_type && <p className="mt-1 text-sm text-red-600">{errors.document_type}</p>}
+                    </div>
+
+                    {/* Si Réclamation */}
+                    <AnimatePresence>
+                      {isReclamation && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="bg-red-50 border-l-4 border-red-400 p-4 rounded-lg space-y-4"
+                        >
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                            <p className="text-sm text-red-700 font-medium">
+                              Pour faire une réclamation, vous devez avoir le numéro de demande reçu par email.
+                            </p>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Numéro d'attestation <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.numero_attestation || ''}
+                              onChange={(e) => setFormData({ ...formData, numero_attestation: e.target.value.toUpperCase() })}
+                              className={`input-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                                errors.numero_attestation ? 'border-red-500' : 'border-gray-300'
+                              }`}
+                              placeholder="ATT-2025-000001"
+                              required
+                            />
+                            {errors.numero_attestation && <p className="mt-1 text-sm text-red-600">{errors.numero_attestation}</p>}
+                            <p className="mt-1 text-xs text-gray-500">Entrez le numéro d'attestation reçu par email</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Motif de la réclamation <span className="text-gray-400">(Optionnel)</span>
+                            </label>
+                            <select
+                              value={formData.additional_info.motif || ''}
+                              onChange={(e) => setFormData({
+                                ...formData,
+                                additional_info: { ...formData.additional_info, motif: e.target.value }
+                              })}
+                              className={`select-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                                errors.motif ? 'border-red-500' : 'border-gray-300'
+                              }`}
+                              required
+                            >
+                              {motifOptions.map((motif) => (
+                                <option key={motif} value={motif}>{motif}</option>
+                              ))}
+                            </select>
+                            {errors.motif && <p className="mt-1 text-sm text-red-600">{errors.motif}</p>}
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Description de la réclamation <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                              value={formData.description}
+                              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                              rows={4}
+                              className={`textarea-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                                errors.description ? 'border-red-500' : 'border-gray-300'
+                              }`}
+                              placeholder="Décrivez votre réclamation en détail..."
+                              required
+                            />
+                            {errors.description && <p className="mt-1 text-sm text-red-600">{errors.description}</p>}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Champs supplémentaires */}
+                    {selectedDocType && selectedDocType.fields && selectedDocType.fields.length > 0 && !isReclamation && (
+                      <div className="bg-gray-50 rounded-xl p-5 space-y-4">
+                        <h3 className="font-semibold text-gray-900">Informations supplémentaires</h3>
+                        {selectedDocType.fields.map((field) => (
+                          <div key={field.name}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              {field.label} {field.required && <span className="text-red-500">*</span>}
+                            </label>
+                            {field.type === 'textarea' ? (
+                              <textarea
+                                value={formData.additional_info[field.name] || ''}
+                                onChange={(e) => setFormData({
+                                  ...formData,
+                                  additional_info: { ...formData.additional_info, [field.name]: e.target.value }
+                                })}
+                                className={`textarea-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                                  errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                                rows={4}
+                                required={field.required}
+                              />
+                            ) : field.type === 'select' ? (
+                              <select
+                                value={formData.additional_info[field.name] || ''}
+                                onChange={(e) => setFormData({
+                                  ...formData,
+                                  additional_info: { ...formData.additional_info, [field.name]: e.target.value }
+                                })}
+                                className={`textarea-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                                  errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                                required={field.required}
+                                disabled={field.options === 'niveaux' && loadingNiveaux}
+                              >
+                                <option value="">{field.placeholder || 'Sélectionnez...'}</option>
+                                {field.options === 'niveaux' ? (
+                                  loadingNiveaux ? (
+                                    <option value="">Chargement...</option>
+                                  ) : (
+                                    niveaux.map((niveau) => (
+                                      <option key={niveau.id} value={niveau.code}>
+                                        {niveau.nom} ({niveau.code})
+                                      </option>
+                                    ))
+                                  )
+                                ) : field.options === 'annees' ? (
+                                  loadingAnnees ? (
+                                    <option value="">Chargement...</option>
+                                  ) : (
+                                    annees.map((annee) => (
+                                      <option key={annee} value={annee}>
+                                        {annee}
+                                      </option>
+                                    ))
+                                  )
+                                ) : (
+                                  Array.isArray(field.options) && field.options.map((opt) => {
+                                    // Gérer les options qui sont des objets {value, label} ou des strings
+                                    if (typeof opt === 'object' && opt.value !== undefined) {
+                                      return <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    } else {
+                                      return <option key={opt} value={opt}>{opt}</option>
+                                    }
+                                  })
+                                )}
+                              </select>
                             ) : (
-                              Array.isArray(field.options) && field.options.map((opt) => {
-                                // Gérer les options qui sont des objets {value, label} ou des strings
-                                if (typeof opt === 'object' && opt.value !== undefined) {
-                                  return <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                } else {
-                                  return <option key={opt} value={opt}>{opt}</option>
-                                }
-                              })
+                              <input
+                                type={field.type}
+                                value={formData.additional_info[field.name] || ''}
+                                onChange={(e) => setFormData({
+                                  ...formData,
+                                  additional_info: { ...formData.additional_info, [field.name]: e.target.value }
+                                })}
+                                className={`input-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                                  errors[field.name] ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                                placeholder={field.placeholder}
+                                required={field.required}
+                              />
                             )}
-                          </select>
-                        ) : (
-                          <input
-                            type={field.type}
-                            value={formData.additional_info[field.name] || ''}
-                            onChange={(e) => setFormData({
-                              ...formData,
-                              additional_info: { ...formData.additional_info, [field.name]: e.target.value }
-                            })}
-                            className={`input-neon w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                              errors[field.name] ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                            placeholder={field.placeholder}
-                            required={field.required}
-                          />
-                        )}
-                        {errors[field.name] && <p className="mt-1 text-sm text-red-600">{errors[field.name]}</p>}
+                            {errors[field.name] && <p className="mt-1 text-sm text-red-600">{errors[field.name]}</p>}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    )}
 
-                {errors.submit && (
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-600" />
-                    <p className="text-red-600 text-sm">{errors.submit}</p>
-                  </div>
-                )}
+                    {errors.submit && (
+                      <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
+                        <AlertCircle className="w-5 h-5 text-red-600" />
+                        <p className="text-red-600 text-sm">{errors.submit}</p>
+                      </div>
+                    )}
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? 'Soumission...' : 'Soumettre la demande'}
-                </button>
-              </form>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? 'Soumission...' : 'Soumettre la demande'}
+                    </button>
+                  </form>
+                )}
+              </div>
             )}
           </div>
 
@@ -1112,60 +1230,41 @@ export default function HomePage() {
                           </div>
                         </div>
 
-                        {/* Phase 2: En traitement */}
-                        <div className="relative flex items-start gap-4 mb-6">
+                        {/* Phase 2: Document envoyé (2 phases au lieu de 3) */}
+                        <div className="relative flex items-start gap-4">
                           <div className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center ${
-                            ['Acceptée', 'Refusée', 'Traitée'].includes(suiviData.status)
-                              ? 'bg-blue-500 text-white'
+                            suiviData.status === 'Traitée'
+                              ? 'bg-green-500 text-white'
+                              : suiviData.status === 'Refusée'
+                              ? 'bg-red-500 text-white'
                               : 'bg-gray-300 text-gray-500'
                           }`}>
-                            <FileText className="w-4 h-4" />
+                            {suiviData.status === 'Refusée' ? (
+                              <X className="w-4 h-4" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4" />
+                            )}
                           </div>
                           <div className="flex-1 pt-1">
                             <p className={`font-semibold ${
-                              ['Acceptée', 'Refusée', 'Traitée'].includes(suiviData.status)
+                              ['Traitée', 'Refusée'].includes(suiviData.status)
                                 ? 'text-gray-900'
                                 : 'text-gray-400'
                             }`}>
-                              Phase 2 : En traitement
+                              Phase 2 : {suiviData.status === 'Refusée' ? 'Demande refusée' : 'Document envoyé'}
                             </p>
                             <p className="text-sm text-gray-600">
                               {suiviData.status === 'Refusée' 
                                 ? 'Votre demande a été refusée'
                                 : suiviData.status === 'Traitée'
-                                ? 'Votre demande a été traitée'
-                                : 'Votre demande est en cours de traitement par l\'administration'}
+                                ? 'Votre document a été généré et envoyé par email'
+                                : 'En attente de traitement par l\'administration'}
                             </p>
                             {suiviData.status === 'Refusée' && suiviData.justification_refus && (
                               <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
                                 {suiviData.justification_refus}
                               </div>
                             )}
-                          </div>
-                        </div>
-
-                        {/* Phase 3: Traitée */}
-                        <div className="relative flex items-start gap-4">
-                          <div className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center ${
-                            suiviData.status === 'Traitée'
-                              ? 'bg-green-500 text-white'
-                              : 'bg-gray-300 text-gray-500'
-                          }`}>
-                            <CheckCircle className="w-4 h-4" />
-                          </div>
-                          <div className="flex-1 pt-1">
-                            <p className={`font-semibold ${
-                              suiviData.status === 'Traitée'
-                                ? 'text-gray-900'
-                                : 'text-gray-400'
-                            }`}>
-                              Phase 3 : Document envoyé
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              {suiviData.status === 'Traitée'
-                                ? 'Votre document a été généré et envoyé par email'
-                                : 'En attente de traitement'}
-                            </p>
                             {suiviData.status === 'Traitée' && suiviData.email_sent_at && (
                               <p className="text-xs text-gray-500 mt-1">
                                 Envoyé le {new Date(suiviData.email_sent_at).toLocaleDateString('fr-FR')}

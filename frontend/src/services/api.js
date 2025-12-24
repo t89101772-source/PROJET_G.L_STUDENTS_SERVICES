@@ -9,14 +9,42 @@ const api = axios.create({
   },
 })
 
-// Intercepteur pour ajouter le token
+// Intercepteur pour ajouter le token et logger les requêtes
 api.interceptors.request.use((config) => {
   const user = JSON.parse(localStorage.getItem('user') || '{}')
   if (user.token) {
     config.headers.Authorization = `Bearer ${user.token}`
   }
+  // Logger les requêtes importantes
+  if (config.url && config.url.includes('send-email-document')) {
+    console.log('📤 REQUÊTE API - send-email-document:', {
+      url: config.url,
+      method: config.method,
+      data: config.data
+    })
+  }
   return config
 })
+
+// Intercepteur pour gérer les erreurs de réponse
+api.interceptors.response.use(
+  (response) => {
+    // Si la réponse contient une erreur dans le body, la traiter comme une erreur
+    if (response.data && response.data.error && !response.data.success) {
+      return Promise.reject({
+        response: {
+          data: response.data,
+          status: response.status
+        }
+      })
+    }
+    return response
+  },
+  (error) => {
+    // Gérer les erreurs HTTP
+    return Promise.reject(error)
+  }
+)
 
 export const authService = {
   login: async (credentials) => {
@@ -70,6 +98,11 @@ export const demandeService = {
   
   getByNumero: async (numeroDemande) => {
     const response = await api.get(`/demandes/suivi/${numeroDemande}`)
+    return response.data
+  },
+  
+  validateStudent: async (email, apogeeNumber, cin) => {
+    const response = await api.post('/validate-student', { email, apogee_number: apogeeNumber, cin })
     return response.data
   },
 }

@@ -308,15 +308,37 @@ function validateConventionStage($pdo, $apogeeNumber, $additionalInfo = []) {
     // Vérifier les informations requises
     $nomEntreprise = $additionalInfo['nom_entreprise'] ?? null;
     $adresseEntreprise = $additionalInfo['adresse_entreprise'] ?? null;
-    $encadrant = $additionalInfo['encadrant'] ?? null;
-    $dureeStage = $additionalInfo['duree_stage'] ?? null;
+    $telEntreprise = $additionalInfo['tel_entreprise'] ?? null;
+    $emailEntreprise = $additionalInfo['email_entreprise'] ?? null;
+    $representantEntreprise = $additionalInfo['representant_entreprise'] ?? null;
+    $qualiteRepresentant = $additionalInfo['qualite_representant'] ?? null;
     $typeStageChoisi = $additionalInfo['type_stage'] ?? null; // PFA ou PFE choisi par l'étudiant
+    $dateDebut = $additionalInfo['date_debut'] ?? null;
+    $dateFin = $additionalInfo['date_fin'] ?? null;
+    $encadrant = $additionalInfo['encadrant'] ?? null;
+    $tuteur = $additionalInfo['tuteur'] ?? null;
+    $themeStage = $additionalInfo['theme_stage'] ?? null;
     $annee = date('Y') . '-' . (date('Y') + 1);
     
-    if (empty($nomEntreprise) || empty($adresseEntreprise) || empty($encadrant) || empty($dureeStage) || empty($typeStageChoisi)) {
+    // Vérifier tous les champs requis
+    $missingFields = [];
+    if (empty($nomEntreprise)) $missingFields[] = 'nom de l\'entreprise';
+    if (empty($adresseEntreprise)) $missingFields[] = 'adresse de l\'entreprise';
+    if (empty($telEntreprise)) $missingFields[] = 'téléphone de l\'entreprise';
+    if (empty($emailEntreprise)) $missingFields[] = 'email de l\'entreprise';
+    if (empty($representantEntreprise)) $missingFields[] = 'représentant de l\'entreprise';
+    if (empty($qualiteRepresentant)) $missingFields[] = 'qualité du représentant';
+    if (empty($typeStageChoisi)) $missingFields[] = 'type de stage';
+    if (empty($dateDebut)) $missingFields[] = 'date de début';
+    if (empty($dateFin)) $missingFields[] = 'date de fin';
+    if (empty($encadrant)) $missingFields[] = 'encadrant';
+    if (empty($tuteur)) $missingFields[] = 'tuteur pédagogique';
+    if (empty($themeStage)) $missingFields[] = 'thème du stage';
+    
+    if (!empty($missingFields)) {
         return [
             'valid' => false,
-            'error' => 'Les informations de l\'entreprise, l\'adresse, l\'encadrant, la durée et le type de stage sont requis'
+            'error' => 'Les champs suivants sont requis : ' . implode(', ', $missingFields)
         ];
     }
     
@@ -550,51 +572,80 @@ function validateConventionStage($pdo, $apogeeNumber, $additionalInfo = []) {
         $inscription = $stmt->fetch(PDO::FETCH_ASSOC);
     }
     
-    // Vérifier la durée du stage selon le type choisi
-    // Extraire le nombre de mois de la chaîne (ex: "2 mois", "4 mois", "3 mois")
-    preg_match('/(\d+)\s*mois?/i', $dureeStage, $matches);
-    $dureeMois = isset($matches[1]) ? (int)$matches[1] : 0;
-    
-    if ($dureeMois <= 0) {
-        return [
-            'valid' => false,
-            'error' => 'La durée doit être spécifiée en mois (ex: "2 mois", "4 mois")'
-        ];
-    }
-    
-    // Utiliser le type de stage choisi par l'étudiant
-    $niveauCode = $inscription['niveau_code'] ?? '';
-    $numeroSemestre = $inscription['numero_semestre'] ?? 0;
-    
-    // Valider la durée selon le type de stage choisi
-    if ($typeStageChoisi === 'PFA') {
-        // PFA : Stage de 2-3 mois
-        if ($dureeMois < 2 || $dureeMois > 3) {
-            $suggestion = '';
-            if ($dureeMois >= 4 && $dureeMois <= 6) {
-                $suggestion = " Note : Une durée de {$dureeMois} mois correspond à un stage PFE (5ème année). Vous devez être en CI3-S9 ou CI3-S10 pour effectuer un PFE.";
-            }
+    // Vérifier les dates et calculer la durée
+    if (!empty($dateDebut) && !empty($dateFin)) {
+        // Convertir les dates en timestamp si elles sont au format YYYY-MM-DD
+        $dateDebutTs = null;
+        $dateFinTs = null;
+        
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateDebut)) {
+            $dateDebutTs = strtotime($dateDebut);
+        } else {
+            $dateDebutTs = strtotime($dateDebut);
+        }
+        
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFin)) {
+            $dateFinTs = strtotime($dateFin);
+        } else {
+            $dateFinTs = strtotime($dateFin);
+        }
+        
+        if ($dateDebutTs === false || $dateFinTs === false) {
             return [
                 'valid' => false,
-                'error' => "Pour un stage PFA (CI2-S8 - 4ème année), la durée doit être entre 2 et 3 mois. Durée actuelle : {$dureeMois} mois.{$suggestion}"
+                'error' => 'Les dates de début et de fin doivent être au format valide (YYYY-MM-DD)'
             ];
         }
-    } elseif ($typeStageChoisi === 'PFE') {
-        // PFE : Stage de 4-6 mois
-        if ($dureeMois < 4 || $dureeMois > 6) {
-            $suggestion = '';
-            if ($dureeMois >= 2 && $dureeMois <= 3) {
-                $suggestion = " Note : Une durée de {$dureeMois} mois correspond à un stage PFA (4ème année). Pour un PFA, vous devez être en CI2-S8.";
-            } elseif ($dureeMois < 2) {
-                $suggestion = " La durée minimale pour un stage PFE est de 4 mois.";
-            } elseif ($dureeMois > 6) {
-                $suggestion = " La durée maximale pour un stage PFE est de 6 mois.";
-            }
+        
+        if ($dateDebutTs >= $dateFinTs) {
             return [
                 'valid' => false,
-                'error' => "Pour un stage PFE (CI3-S9/CI3-S10 - 5ème année), la durée doit être entre 4 et 6 mois. Durée actuelle : {$dureeMois} mois.{$suggestion}"
+                'error' => 'La date de fin doit être postérieure à la date de début'
             ];
         }
+        
+        // Calculer la durée en mois
+        $diff = $dateFinTs - $dateDebutTs;
+        $dureeMois = round($diff / (30 * 24 * 60 * 60)); // Approximation : 30 jours = 1 mois
+        
+        // Utiliser le type de stage choisi par l'étudiant
+        $niveauCode = $inscription['niveau_code'] ?? '';
+        $numeroSemestre = $inscription['numero_semestre'] ?? 0;
+        
+        // Valider la durée selon le type de stage choisi
+        if ($typeStageChoisi === 'PFA') {
+            // PFA : Stage de 2-3 mois
+            if ($dureeMois < 2 || $dureeMois > 3) {
+                $suggestion = '';
+                if ($dureeMois >= 4 && $dureeMois <= 6) {
+                    $suggestion = " Note : Une durée de {$dureeMois} mois correspond à un stage PFE (5ème année). Vous devez être en CI3-S9 ou CI3-S10 pour effectuer un PFE.";
+                }
+                return [
+                    'valid' => false,
+                    'error' => "Pour un stage PFA (CI2-S8 - 4ème année), la durée doit être entre 2 et 3 mois. Durée calculée : {$dureeMois} mois.{$suggestion}"
+                ];
+            }
+        } elseif ($typeStageChoisi === 'PFE') {
+            // PFE : Stage de 4-6 mois
+            if ($dureeMois < 4 || $dureeMois > 6) {
+                $suggestion = '';
+                if ($dureeMois >= 2 && $dureeMois <= 3) {
+                    $suggestion = " Note : Une durée de {$dureeMois} mois correspond à un stage PFA (4ème année). Pour un PFA, vous devez être en CI2-S8.";
+                } elseif ($dureeMois < 2) {
+                    $suggestion = " La durée minimale pour un stage PFE est de 4 mois.";
+                } elseif ($dureeMois > 6) {
+                    $suggestion = " La durée maximale pour un stage PFE est de 6 mois.";
+                }
+                return [
+                    'valid' => false,
+                    'error' => "Pour un stage PFE (CI3-S9/CI3-S10 - 5ème année), la durée doit être entre 4 et 6 mois. Durée calculée : {$dureeMois} mois.{$suggestion}"
+                ];
+            }
+        }
+    } else {
+        // Si les dates ne sont pas fournies, on ne peut pas valider la durée
+        // Mais on continue quand même car les dates sont déjà vérifiées comme requises plus haut
+        $dureeMois = 0;
     }
     
     // Validation réussie - Pas de vérification de dates ni de sujet (car pas encore assignés)

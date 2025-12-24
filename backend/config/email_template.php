@@ -122,63 +122,54 @@ function sendEmailWithDocument($to_email, $nom, $prenom, $numero_attestation, $n
     
     require_once $autoload_path;
     
+    // Vérifier que le PDF existe AVANT de créer PHPMailer
+    if (empty($pdf_path) || !file_exists($pdf_path)) {
+        error_log("ERREUR sendEmailWithDocument: Le fichier PDF n'existe pas: $pdf_path");
+        return false;
+    }
+    
     $mail = new PHPMailer(true);
     
     try {
-        // Configuration SMTP Gmail
+        // Configuration SMTP Gmail (identique à sendEmailConfirmationDemande qui fonctionne)
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        
-        // Configuration Gmail - À MODIFIER AVEC VOS IDENTIFIANTS
-        // Pour obtenir un mot de passe d'application Gmail :
-        // 1. Allez sur https://myaccount.google.com/
-        // 2. Sécurité → Validation en 2 étapes (doit être activée)
-        // 3. Mots de passe des applications → Créer un nouveau mot de passe
-        // 4. Copiez le mot de passe généré (16 caractères)
-        
-        $mail->Username = 'votre email'; // REMPLACER par votre email Gmail
-        $mail->Password = 'votre mot de passe d'application Gmail'; // REMPLACER par votre mot de passe d'application Gmail (16 caractères)
+        $mail->Username = 'da805632@gmail.com';
+        $mail->Password = 'niqzbihnzjsfkals';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
-        $mail->SMTPDebug = 0; // Mettre à 2 pour debug, 0 pour production
-        // Pour activer le debug temporairement, changez 0 en 2 ci-dessus
-        // Pour activer le debug, décommenter les lignes suivantes :
-        // $mail->SMTPDebug = 2;
-        // $mail->Debugoutput = function($str, $level) {
-        //     error_log("PHPMailer Debug (level $level): $str");
-        // };
+        $mail->SMTPDebug = 2; // ACTIVÉ TEMPORAIREMENT pour voir l'erreur
+        $mail->Debugoutput = function($str, $level) {
+            error_log("PHPMailer Debug ($level): $str");
+        };
         
         // Expéditeur
-        $mail->setFrom('votre email', 'UnivDocs');
-        $mail->addReplyTo('votre email', 'Support UnivDocs');
+        $mail->setFrom('da805632@gmail.com', 'UnivDocs');
+        $mail->addReplyTo('da805632@gmail.com', 'Support UnivDocs');
         
         // Destinataire
         $mail->addAddress($to_email, $prenom . ' ' . $nom);
         
-        // Pièce jointe PDF
-        if (file_exists($pdf_path)) {
-            $mail->addAttachment($pdf_path, $document_type . '_' . $numero_attestation . '.pdf');
-        }
+        // Pièce jointe PDF (on sait qu'il existe car vérifié avant)
+        $attachment_name = preg_replace('/[^a-zA-Z0-9._-]/', '_', $document_type . '_' . $numero_attestation . '.pdf');
+        $mail->addAttachment($pdf_path, $attachment_name);
         
         // Contenu
         $mail->isHTML(true);
         $mail->Subject = 'Votre ' . $document_type . ' est prêt - ' . $numero_attestation;
         $mail->Body = getEmailTemplate($nom, $prenom, $numero_attestation, $numero_demande, $document_type);
-        
-        // Version texte alternative
         $mail->AltBody = "Bonjour $prenom,\n\nVotre $document_type est prêt.\n\nNuméro de demande: $numero_demande\nNuméro d'attestation: $numero_attestation\n\nVotre document est joint à cet email.\n\nCordialement,\nL'équipe UnivDocs";
         
+        // Envoyer l'email
         $mail->send();
+        error_log("SendEmailWithDocument - Email envoyé avec succès à: $to_email");
         return true;
     } catch (Exception $e) {
-        $error_msg = "Erreur email PHPMailer: {$mail->ErrorInfo} | Exception: " . $e->getMessage();
-        error_log($error_msg);
-        // Afficher aussi dans la console si en mode debug
-        if (php_sapi_name() === 'cli') {
-            echo "❌ ERREUR: $error_msg\n";
-        }
+        $error_msg = "Erreur email PHPMailer: " . ($mail->ErrorInfo ?? 'N/A') . " | Exception: " . $e->getMessage();
+        error_log("SendEmailWithDocument - ERREUR: $error_msg");
+        error_log("SendEmailWithDocument - PDF path: $pdf_path | Existe: " . (file_exists($pdf_path) ? 'OUI' : 'NON'));
         return false;
     }
 }
@@ -374,15 +365,15 @@ function sendEmailConfirmationReclamation($to_email, $nom, $prenom, $reclamation
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'votre email';
-        $mail->Password = 'votre mot de passe de l'app';
+        $mail->Username = 'da805632@gmail.com';
+        $mail->Password = 'niqzbihnzjsfkals';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
         $mail->SMTPDebug = 0;
 
-        $mail->setFrom('votre email', 'UnivDocs');
-        $mail->addReplyTo('votre email', 'Support UnivDocs');
+        $mail->setFrom('da805632@gmail.com', 'UnivDocs');
+        $mail->addReplyTo('da805632@gmail.com', 'Support UnivDocs');
         $mail->addAddress($to_email, $prenom . ' ' . $nom);
 
         $mail->isHTML(true);
@@ -512,15 +503,15 @@ function sendEmailRefusee($to_email, $nom, $prenom, $numero_demande, $document_t
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'votre email';
-        $mail->Password = 'votre mot de passe de l'app';
+        $mail->Username = 'da805632@gmail.com';
+        $mail->Password = 'niqzbihnzjsfkals';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
         $mail->SMTPDebug = 0;
         
-        $mail->setFrom('votre email', 'UnivDocs');
-        $mail->addReplyTo('votre email', 'Support UnivDocs');
+        $mail->setFrom('da805632@gmail.com', 'UnivDocs');
+        $mail->addReplyTo('da805632@gmail.com', 'Support UnivDocs');
         $mail->addAddress($to_email, $prenom . ' ' . $nom);
         
         $mail->isHTML(true);
@@ -554,15 +545,15 @@ function sendEmailReclamation($to_email, $nom, $prenom, $numero_demande, $docume
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'votre email';
-        $mail->Password = 'votre mot de passe de l'app';
+        $mail->Username = 'da805632@gmail.com';
+        $mail->Password = 'niqzbihnzjsfkals';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
         $mail->SMTPDebug = 0;
         
-        $mail->setFrom('votre email', 'UnivDocs');
-        $mail->addReplyTo('votre email', 'Support UnivDocs');
+        $mail->setFrom('da805632@gmail.com', 'UnivDocs');
+        $mail->addReplyTo('da805632@gmail.com', 'Support UnivDocs');
         $mail->addAddress($to_email, $prenom . ' ' . $nom);
         
         $mail->isHTML(true);
@@ -599,16 +590,16 @@ function sendEmailConfirmationDemande($to_email, $nom, $prenom, $numero_demande,
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'votre email';
-        $mail->Password = 'votre mot de passe de l'app';
+        $mail->Username = 'da805632@gmail.com';
+        $mail->Password = 'niqzbihnzjsfkals';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
         $mail->SMTPDebug = 0;
         
         // Expéditeur
-        $mail->setFrom('votre email', 'UnivDocs');
-        $mail->addReplyTo('votre email', 'Support UnivDocs');
+        $mail->setFrom('da805632@gmail.com', 'UnivDocs');
+        $mail->addReplyTo('da805632@gmail.com', 'Support UnivDocs');
         
         // Destinataire
         $mail->addAddress($to_email, $prenom . ' ' . $nom);
@@ -696,12 +687,6 @@ function getEmailTemplateConfirmation($nom, $prenom, $numero_demande, $document_
                                 </p>
                             </div>
                             
-                            <div style="background-color: #fef3c7; border: 1px solid #fcd34d; padding: 15px; margin: 25px 0; border-radius: 5px;">
-                                <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.6;">
-                                    <strong>📋 Note importante :</strong> Une fois votre demande acceptée, vous recevrez un email contenant votre document avec un <strong>numéro d\'attestation unique</strong>. Ce numéro vous permettra de réclamer ou de vérifier votre document si nécessaire. Conservez-le précieusement.
-                                </p>
-                            </div>
-                            
                             <p style="color: #4b5563; margin: 30px 0 0 0; font-size: 16px; line-height: 1.6;">
                                 <strong>Important :</strong> Conservez bien votre numéro de demande <strong>' . htmlspecialchars($numero_demande) . '</strong> pour suivre l\'avancement de votre demande.
                             </p>
@@ -731,4 +716,3 @@ function getEmailTemplateConfirmation($nom, $prenom, $numero_demande, $document_
 </html>';
 }
 ?>
-
