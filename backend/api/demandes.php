@@ -323,12 +323,24 @@ if ($method === 'GET') {
             
             // Mettre à jour le statut D'ABORD (avant l'envoi d'email pour éviter les problèmes)
             error_log("PATCH - Mise à jour statut pour demande ID: $id, status: $status");
-            if (!empty($justification) && $justification !== null) {
-                $stmt = $pdo->prepare("UPDATE demande SET status = ?, justification_refus = ? WHERE id = ?");
-                $stmt->execute([$status, $justification, $id]);
+            // Si on accepte ou refuse, mettre à jour date_traitement
+            if ($status === 'Acceptée' || $status === 'Refusée') {
+                if (!empty($justification) && $justification !== null) {
+                    $stmt = $pdo->prepare("UPDATE demande SET status = ?, justification_refus = ?, date_traitement = NOW() WHERE id = ?");
+                    $stmt->execute([$status, $justification, $id]);
+                } else {
+                    $stmt = $pdo->prepare("UPDATE demande SET status = ?, justification_refus = NULL, date_traitement = NOW() WHERE id = ?");
+                    $stmt->execute([$status, $id]);
+                }
             } else {
-                $stmt = $pdo->prepare("UPDATE demande SET status = ?, justification_refus = NULL WHERE id = ?");
-                $stmt->execute([$status, $id]);
+                // Pour les autres statuts, ne pas modifier date_traitement
+                if (!empty($justification) && $justification !== null) {
+                    $stmt = $pdo->prepare("UPDATE demande SET status = ?, justification_refus = ? WHERE id = ?");
+                    $stmt->execute([$status, $justification, $id]);
+                } else {
+                    $stmt = $pdo->prepare("UPDATE demande SET status = ?, justification_refus = NULL WHERE id = ?");
+                    $stmt->execute([$status, $id]);
+                }
             }
             error_log("PATCH - Statut mis à jour avec succès");
             
@@ -465,7 +477,7 @@ if ($method === 'GET') {
                                                 $pdo->exec("ALTER TABLE demande ADD COLUMN email_sent_at DATETIME NULL");
                                             }
                                             
-                                            $updateStmt = $pdo->prepare("UPDATE demande SET email_sent = 1, email_sent_at = NOW(), status = 'Traitée' WHERE id = ?");
+                                            $updateStmt = $pdo->prepare("UPDATE demande SET email_sent = 1, email_sent_at = NOW(), status = 'Traitée', date_traitement = NOW() WHERE id = ?");
                                             $updateStmt->execute([$id]);
                                             error_log("PATCH - Email envoyé avec succès pour demande ID: $id, statut mis à jour à 'Traitée'");
                                         } catch (PDOException $e) {
@@ -474,19 +486,19 @@ if ($method === 'GET') {
                                     } else {
                                         error_log("PATCH - Échec envoi email pour demande ID: $id - emailSent = " . var_export($emailSent, true));
                                         // Mettre à jour le statut à 'Acceptée' si l'email échoue
-                                        $updateStmt = $pdo->prepare("UPDATE demande SET status = 'Acceptée' WHERE id = ?");
+                                        $updateStmt = $pdo->prepare("UPDATE demande SET status = 'Acceptée', date_traitement = NOW() WHERE id = ?");
                                         $updateStmt->execute([$id]);
                                     }
                                 } else {
                                     error_log("PATCH - Fonction sendEmailWithDocument non trouvée");
                                     // Mettre à jour le statut quand même
-                                    $updateStmt = $pdo->prepare("UPDATE demande SET status = 'Acceptée' WHERE id = ?");
+                                    $updateStmt = $pdo->prepare("UPDATE demande SET status = 'Acceptée', date_traitement = NOW() WHERE id = ?");
                                     $updateStmt->execute([$id]);
                                 }
                             } else {
                                 error_log("PATCH - Pas d'email pour la demande ID: $id");
                                 // Pas d'email, mettre à jour le statut à 'Acceptée'
-                                $updateStmt = $pdo->prepare("UPDATE demande SET status = 'Acceptée' WHERE id = ?");
+                                $updateStmt = $pdo->prepare("UPDATE demande SET status = 'Acceptée', date_traitement = NOW() WHERE id = ?");
                                 $updateStmt->execute([$id]);
                             }
                         } else {

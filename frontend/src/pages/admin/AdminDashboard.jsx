@@ -50,6 +50,7 @@ export default function AdminDashboard() {
   const [historyFilterDate, setHistoryFilterDate] = useState('')
   const [historyFilterRecordType, setHistoryFilterRecordType] = useState('Tous')
   const [historyFiltersOpen, setHistoryFiltersOpen] = useState(false)
+  const [viewMotif, setViewMotif] = useState(null) // Pour afficher le motif dans une modal
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['adminStats'],
@@ -123,16 +124,23 @@ export default function AdminDashboard() {
     // Ajouter les demandes avec leur type
     if (demandes) {
       demandes.forEach(d => {
+        // Normaliser "Traitée" en "Acceptée"
+        const normalizedStatus = d.status === 'Traitée' ? 'Acceptée' : d.status
+        // Utiliser date_traitement si disponible (date de l'action), sinon date_demande
+        // Pour les demandes acceptées/refusées, on veut la date de traitement
+        const actionDate = (normalizedStatus === 'Acceptée' || normalizedStatus === 'Refusée') && d.date_traitement
+          ? d.date_traitement
+          : d.date_demande
         all.push({
           id: d.id,
           type: 'demande',
           document_type: d.document_type,
-          status: d.status,
-          date: d.date_demande,
+          status: normalizedStatus,
+          date: actionDate,
           numero: d.numero_demande || d.numero_attestation,
           nom: d.nom || '',
           prenom: d.prenom || '',
-          justification: d.justification || ''
+          justification: d.justification_refus || d.justification || ''
         })
       })
     }
@@ -140,16 +148,23 @@ export default function AdminDashboard() {
     // Ajouter les réclamations avec leur type
     if (reclamations) {
       reclamations.forEach(r => {
+        // Normaliser "Traitée" en "Acceptée" si nécessaire
+        const normalizedStatus = r.status === 'Traitée' ? 'Acceptée' : r.status
+        // Utiliser date_reponse si disponible (date de l'action), sinon date_reclamation
+        // Pour les réclamations résolues/rejetées, on veut la date de réponse
+        const actionDate = (normalizedStatus === 'Résolue' || normalizedStatus === 'Rejetée') && r.date_reponse
+          ? r.date_reponse
+          : r.date_reclamation
         all.push({
           id: r.id,
           type: 'reclamation',
           document_type: r.document_type,
-          status: r.status,
-          date: r.date_reclamation,
+          status: normalizedStatus,
+          date: actionDate,
           numero: r.numero_attestation_reclamee || r.numero_demande_reclamee,
           nom: r.nom || '',
           prenom: r.prenom || '',
-          reponse: r.reponse || ''
+          justification: r.reponse_admin || r.reponse || ''
         })
       })
     }
@@ -160,9 +175,13 @@ export default function AdminDashboard() {
 
   // Statuts disponibles pour l'historique
   const historyStatuses = useMemo(() => {
+    // Statuts autorisés uniquement : Acceptée, Refusée, Résolue, Rejetée
+    const allowedStatuses = ['Acceptée', 'Refusée', 'Résolue', 'Rejetée']
     const statusSet = new Set()
     historyAll.forEach(item => {
-      if (item.status) statusSet.add(item.status)
+      if (item.status && allowedStatuses.includes(item.status)) {
+        statusSet.add(item.status)
+      }
     })
     return ['Tous', ...Array.from(statusSet).sort()]
   }, [historyAll])
@@ -499,10 +518,12 @@ export default function AdminDashboard() {
 
   // Fonction pour obtenir le badge de statut
   const getStatusBadge = (status) => {
+    // Normaliser "Traitée" en "Acceptée" pour l'affichage
+    const normalizedStatus = status === 'Traitée' ? 'Acceptée' : status
     const badges = {
       'En attente': { color: 'bg-yellow-100 text-yellow-800', label: 'En attente' },
       'Acceptée': { color: 'bg-green-100 text-green-800', label: 'Acceptée' },
-      'Traitée': { color: 'bg-blue-100 text-blue-800', label: 'Traitée' },
+      'Traitée': { color: 'bg-green-100 text-green-800', label: 'Acceptée' },
       'Refusée': { color: 'bg-red-100 text-red-800', label: 'Refusée' },
       'Rejetée': { color: 'bg-red-100 text-red-800', label: 'Rejetée' },
       'En cours': { color: 'bg-blue-100 text-blue-800', label: 'En cours' },
@@ -510,7 +531,7 @@ export default function AdminDashboard() {
       'Fermée': { color: 'bg-gray-100 text-gray-800', label: 'Fermée' },
       'Ouverte': { color: 'bg-yellow-100 text-yellow-800', label: 'Ouverte' }
     }
-    const badge = badges[status] || { color: 'bg-gray-100 text-gray-800', label: status || 'Inconnu' }
+    const badge = badges[normalizedStatus] || badges[status] || { color: 'bg-gray-100 text-gray-800', label: normalizedStatus || status || 'Inconnu' }
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.color}`}>
         {badge.label}
@@ -1364,13 +1385,13 @@ export default function AdminDashboard() {
                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Document</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Statut</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Justification/Réponse</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
                       </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                           {filteredHistory.length === 0 ? (
                       <tr>
-                              <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                              <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                                 Aucun enregistrement trouvé avec ces critères
                               </td>
                       </tr>
@@ -1412,43 +1433,43 @@ export default function AdminDashboard() {
                                   })}
                                 </td>
                                 <td className="px-6 py-4">{getStatusBadge(item.status)}</td>
-                                <td className="px-6 py-4 text-sm text-gray-600">
-                                  {item.justification ? (
-                                    <span className="text-red-600 italic">{item.justification}</span>
-                                  ) : (
-                                    <span className="text-gray-400">-</span>
-                                  )}
-                                </td>
                                 <td className="px-6 py-4">
-                                  {/* Bouton Voir document (seulement pour les demandes avec document_path) */}
-                                  {item.type === 'demande' && (
-                                    <button
-                                      onClick={() => handleViewHistoryDocument(item)}
-                                      disabled={generatingDemandeId}
-                                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                                    >
-                                      <FileText className="w-3 h-3" />
-                                      Voir document
-                                    </button>
-                                  )}
-                                  {item.type === 'reclamation' && (
-                                    <button
-                                      onClick={() => handleViewHistoryDocument(item)}
-                                      disabled={generatingDemandeId}
-                                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                                    >
-                                      <FileText className="w-3 h-3" />
-                                      Voir document
-                                    </button>
-                                  )}
+                                  <div className="flex items-center gap-2">
+                                    {/* Bouton Voir motif (si refusée/rejetée) */}
+                                    {(item.status === 'Refusée' || item.status === 'Rejetée') && item.justification ? (
+                                      <button
+                                        onClick={() => setViewMotif({
+                                          type: item.type === 'demande' ? 'Demande' : 'Réclamation',
+                                          id: item.id,
+                                          status: item.status,
+                                          motif: item.justification
+                                        })}
+                                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
+                                      >
+                                        <Eye className="w-3 h-3" />
+                                        Voir motif
+                                      </button>
+                                    ) : null}
+                                    {/* Bouton Voir document */}
+                                    {(item.type === 'demande' || item.type === 'reclamation') && (
+                                      <button
+                                        onClick={() => handleViewHistoryDocument(item)}
+                                        disabled={generatingDemandeId}
+                                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                      >
+                                        <FileText className="w-3 h-3" />
+                                        Voir document
+                                      </button>
+                                    )}
+                                  </div>
                                 </td>
                               </motion.tr>
                             ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
           </div>
           )}
 
@@ -1812,6 +1833,40 @@ export default function AdminDashboard() {
                   </div>
             </div>
           </motion.div>
+            </div>
+          )}
+
+          {/* Modal pour afficher le motif de rejet/refus */}
+          {viewMotif && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <motion.div 
+                initial={{ scale: 0.98, opacity: 0 }} 
+                animate={{ scale: 1, opacity: 1 }} 
+                className="bg-white rounded-2xl p-6 max-w-2xl w-full"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-900">
+                    Motif de {viewMotif.status === 'Refusée' ? 'refus' : 'rejet'} - {viewMotif.type} #{viewMotif.id}
+                  </h3>
+                  <button
+                    onClick={() => setViewMotif(null)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <XCircle className="w-6 h-6" />
+                  </button>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{viewMotif.motif}</p>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={() => setViewMotif(null)}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </motion.div>
             </div>
           )}
         </motion.div>

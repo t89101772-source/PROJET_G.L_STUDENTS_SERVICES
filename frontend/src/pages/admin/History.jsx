@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
-import { CheckCircle, XCircle, Clock, Search, Filter, MessageSquare, FileText } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, Search, Filter, MessageSquare, FileText, Eye } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { demandeService, reclamationService } from '../../services/api'
 import LoadingPage from '../../components/LoadingPage'
@@ -17,6 +17,7 @@ export default function History() {
   const [filterType, setFilterType] = useState('Tous')
   const [filterDate, setFilterDate] = useState('')
   const [filterRecordType, setFilterRecordType] = useState('Tous') // 'Tous', 'demande', 'reclamation'
+  const [viewMotif, setViewMotif] = useState(null) // Pour afficher le motif dans une modal
 
   const { data: demandes, isLoading: isLoadingDemandes } = useQuery({
     queryKey: ['demandes'],
@@ -35,12 +36,19 @@ export default function History() {
     // Ajouter les demandes
     if (demandes) {
       demandes.forEach(d => {
+        // Normaliser "Traitée" en "Acceptée"
+        const normalizedStatus = d.status === 'Traitée' ? 'Acceptée' : d.status
+        // Utiliser date_traitement si disponible (date de l'action), sinon date_demande
+        // Pour les demandes acceptées/refusées, on veut la date de traitement
+        const actionDate = (normalizedStatus === 'Acceptée' || normalizedStatus === 'Refusée') && d.date_traitement
+          ? d.date_traitement
+          : d.date_demande
         all.push({
           id: d.id,
           type: 'demande',
           document_type: d.document_type,
-          status: d.status,
-          date: d.date_demande,
+          status: normalizedStatus,
+          date: actionDate,
           nom: d.nom || '',
           prenom: d.prenom || '',
           justification: d.justification_refus || null
@@ -51,12 +59,19 @@ export default function History() {
     // Ajouter les réclamations
     if (reclamations) {
       reclamations.forEach(r => {
+        // Normaliser "Traitée" en "Acceptée" si nécessaire
+        const normalizedStatus = r.status === 'Traitée' ? 'Acceptée' : r.status
+        // Utiliser date_reponse si disponible (date de l'action), sinon date_reclamation
+        // Pour les réclamations résolues/rejetées, on veut la date de réponse
+        const actionDate = (normalizedStatus === 'Résolue' || normalizedStatus === 'Rejetée') && r.date_reponse
+          ? r.date_reponse
+          : r.date_reclamation
         all.push({
           id: r.id,
           type: 'reclamation',
           document_type: r.document_type,
-          status: r.status,
-          date: r.date_reclamation,
+          status: normalizedStatus,
+          date: actionDate,
           nom: r.nom || '',
           prenom: r.prenom || '',
           justification: r.reponse_admin || r.reponse || null
@@ -126,28 +141,33 @@ export default function History() {
 
   // Statuts uniques (demandes + réclamations)
   const allStatuses = useMemo(() => {
+    // Statuts autorisés uniquement
+    const allowedStatuses = ['Acceptée', 'Refusée', 'Résolue', 'Rejetée']
+    
     const statuses = new Set()
     if (demandes) {
       demandes.forEach(d => {
-        if (d.status) statuses.add(d.status)
+        if (d.status && allowedStatuses.includes(d.status)) {
+          statuses.add(d.status)
+        }
       })
     }
     if (reclamations) {
       reclamations.forEach(r => {
-        if (r.status) statuses.add(r.status)
+        if (r.status && allowedStatuses.includes(r.status)) {
+          statuses.add(r.status)
+        }
       })
     }
 
-    // On enlève les statuts qui ne sont plus utilisés dans la logique actuelle
-    // (par exemple "Fermée" côté réclamations, puisque tu gardes seulement Résolue / Rejetée)
-    const filtered = Array.from(statuses).filter((s) => s !== 'Fermée')
-
-    return ['Tous', ...filtered]
+    return ['Tous', ...Array.from(statuses).sort()]
   }, [demandes, reclamations])
 
   const isLoading = isLoadingDemandes || isLoadingReclamations
 
   const getStatusBadge = (status) => {
+    // Normaliser "Traitée" en "Acceptée" pour l'affichage
+    const normalizedStatus = status === 'Traitée' ? 'Acceptée' : status
     const badges = {
       'En attente': { color: 'bg-orange-100 text-orange-700', icon: Clock },
       'Acceptée': { color: 'bg-green-100 text-green-700', icon: CheckCircle },
@@ -158,12 +178,12 @@ export default function History() {
       'Résolue': { color: 'bg-green-100 text-green-700', icon: CheckCircle },
       'Fermée': { color: 'bg-gray-100 text-gray-700', icon: XCircle },
     }
-    const badge = badges[status] || { color: 'bg-gray-100 text-gray-700', icon: Clock }
+    const badge = badges[normalizedStatus] || badges[status] || { color: 'bg-gray-100 text-gray-700', icon: Clock }
     const Icon = badge.icon
     return (
       <span className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium ${badge.color}`}>
         <Icon className="w-3 h-3" />
-        <span>{status}</span>
+        <span>{normalizedStatus}</span>
       </span>
     )
   }
@@ -403,7 +423,7 @@ export default function History() {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Document</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Statut</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Justification/Réponse</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -451,11 +471,22 @@ export default function History() {
                           })}
                         </td>
                         <td className="px-6 py-4">{getStatusBadge(item.status)}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {item.justification ? (
-                            <span className="text-red-600 italic">{item.justification}</span>
+                        <td className="px-6 py-4">
+                          {(item.status === 'Refusée' || item.status === 'Rejetée') && item.justification ? (
+                            <button
+                              onClick={() => setViewMotif({
+                                type: item.type === 'demande' ? 'Demande' : 'Réclamation',
+                                id: item.id,
+                                status: item.status,
+                                motif: item.justification
+                              })}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
+                            >
+                              <Eye className="w-3 h-3" />
+                              Voir motif
+                            </button>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-400 text-sm">-</span>
                           )}
                         </td>
                       </motion.tr>
@@ -469,6 +500,40 @@ export default function History() {
           </div>
         </motion.div>
       </main>
+
+      {/* Modal pour afficher le motif de rejet/refus */}
+      {viewMotif && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <motion.div 
+            initial={{ scale: 0.98, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="bg-white rounded-2xl p-6 max-w-2xl w-full"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900">
+                Motif de {viewMotif.status === 'Refusée' ? 'refus' : 'rejet'} - {viewMotif.type} #{viewMotif.id}
+              </h3>
+              <button
+                onClick={() => setViewMotif(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{viewMotif.motif}</p>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setViewMotif(null)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }
