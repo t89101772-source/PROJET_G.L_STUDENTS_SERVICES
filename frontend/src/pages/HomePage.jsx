@@ -86,7 +86,6 @@ export default function HomePage() {
 
   const releveNiveauOptions = [
     { value: '', label: 'Sélectionnez le niveau' },
-    { value: 'Tous', label: 'Tous' },
     { value: '2AP1', label: '2AP1' },
     { value: '2AP2', label: '2AP2' },
     { value: 'CI1', label: 'CI1' },

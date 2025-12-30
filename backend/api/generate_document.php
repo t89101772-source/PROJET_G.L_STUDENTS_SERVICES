@@ -887,28 +887,51 @@ function generatePDF($demande, $validationData = []) {
             break;
             
         case 'Relevé de notes':
-            // Relevé (options):
-            // - niveau_cible = Tous => S1 jusqu'au dernier semestre validé
-            // - niveau_cible = un niveau => semestres validés de ce niveau
+            // Relevé : niveau_cible obligatoire (un niveau spécifique : 2AP1, 2AP2, CI1, CI2, CI3)
             global $pdo;
 
-            $niveauCible = $validationData['niveau_cible'] ?? ($additionalInfo['niveau_cible'] ?? 'Tous');
+            $niveauCible = $validationData['niveau_cible'] ?? ($additionalInfo['niveau_cible'] ?? null);
             $included = $validationData['included_semestres'] ?? null;
 
+            // Vérifier que le niveau est spécifié et valide
+            if (empty($niveauCible) || $niveauCible === 'Tous') {
+                $pdf->MultiCell(0, 6, "Erreur : Veuillez sélectionner un niveau spécifique pour le relevé de notes (2AP1, 2AP2, CI1, CI2 ou CI3).", 0, 'L');
+                break;
+            }
+
+            // Si included n'est pas fourni, le calculer depuis le niveau
             if (!is_array($included) || empty($included)) {
-                // Fallback minimal si validationData non transmis
+                $ranges = [
+                    '2AP1' => [1, 2],
+                    '2AP2' => [3, 4],
+                    'CI1'  => [5, 6],
+                    'CI2'  => [7, 8],
+                    'CI3'  => [9, 10],
+                ];
+                
+                if (!isset($ranges[$niveauCible])) {
+                    $pdf->MultiCell(0, 6, "Erreur : Niveau invalide pour le relevé de notes.", 0, 'L');
+                    break;
+                }
+                
+                // Récupérer les semestres validés pour ce niveau
+                [$minS, $maxS] = $ranges[$niveauCible];
                 $stmt = $pdo->prepare("
-                    SELECT MAX(n.numero_semestre) AS max_sem
+                    SELECT DISTINCT n.numero_semestre
                     FROM resultat_semestre rs
                     INNER JOIN niveau n ON n.id = rs.niveau_id
                     WHERE rs.apogee_number = ?
                       AND rs.statut = 'Validé'
+                      AND n.numero_semestre >= ? AND n.numero_semestre <= ?
+                    ORDER BY n.numero_semestre ASC
                 ");
-                $stmt->execute([$demande['apogee_number']]);
-                $maxValidated = (int)($stmt->fetchColumn() ?: 0);
-                if ($maxValidated <= 0) $maxValidated = 10;
-                $included = range(1, $maxValidated);
-                $niveauCible = 'Tous';
+                $stmt->execute([$demande['apogee_number'], $minS, $maxS]);
+                $included = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+                
+                if (empty($included)) {
+                    $pdf->MultiCell(0, 6, "Aucun semestre validé trouvé pour le niveau $niveauCible.", 0, 'L');
+                    break;
+                }
             }
 
             $placeholders = implode(',', array_fill(0, count($included), '?'));
@@ -1072,13 +1095,70 @@ function generatePDF($demande, $validationData = []) {
             
             // Informations étudiant (une seule fois, sur la première page)
             $nomComplet = trim(($etudiant['prenom'] ?? '') . ' ' . ($etudiant['nom'] ?? ''));
+            
+            // Déterminer le niveau basé sur les semestres inclus dans le relevé (pas sur l'inscription)
             $niveauDisplay = '';
-            if ($inscription && !empty($inscription['niveau'])) {
-                $niveauDisplay = cleanNiveau($inscription['niveau']);
-                if (strpos($niveauDisplay, '2AP') !== false) {
-                    $niveauDisplay = '2ºannee Preparatoire';
-                } elseif (strpos($niveauDisplay, 'CI') !== false) {
-                    $niveauDisplay = 'Cycle Ingenieur - ' . $niveauDisplay;
+            $filiereDisplay = '';
+            
+            // Mapping des semestres vers les niveaux
+            $semestreToNiveau = [
+                1 => '2AP1', 2 => '2AP1',
+                3 => '2AP2', 4 => '2AP2',
+                5 => 'CI1', 6 => 'CI1',
+                7 => 'CI2', 8 => 'CI2',
+                9 => 'CI3', 10 => 'CI3'
+            ];
+            
+            // Trouver le niveau basé sur le semestre le plus élevé dans le relevé
+            $maxSemestre = max(array_keys($bySem));
+            $niveauCode = $semestreToNiveau[$maxSemestre] ?? '';
+            
+            // Récupérer la filière depuis l'inscription ou les notes
+            $filiere = null;
+            if ($inscription && !empty($inscription['filiere'])) {
+                $filiere = $inscription['filiere'];
+            } else {
+                // Essayer de récupérer depuis les notes (via niveau)
+                $stmt = $pdo->prepare("
+                    SELECT DISTINCT i.filiere
+                    FROM inscription i
+                    INNER JOIN niveau n ON i.niveau_id = n.id
+                    WHERE i.apogee_number = ?
+                      AND n.numero_semestre IN (" . implode(',', array_keys($bySem)) . ")
+                      AND i.filiere IS NOT NULL
+                      AND i.filiere != 'Cycle Préparatoire'
+                    ORDER BY i.annee_universitaire DESC
+                    LIMIT 1
+                ");
+                $stmt->execute([$demande['apogee_number']]);
+                $filiereRow = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($filiereRow) {
+                    $filiere = $filiereRow['filiere'];
+                }
+            }
+            
+            // Formater l'affichage du niveau
+            if ($niveauCode) {
+                if (strpos($niveauCode, '2AP') !== false) {
+                    $niveauDisplay = $niveauCode; // 2AP1 ou 2AP2 (au lieu de "2ème Année Préparatoire")
+                } elseif (strpos($niveauCode, 'CI') !== false) {
+                    $niveauDisplay = $niveauCode; // CI1, CI2, CI3
+                    if ($filiere && $filiere !== 'Cycle Préparatoire') {
+                        $filiereDisplay = $filiere;
+                    }
+                }
+            } else {
+                // Fallback : utiliser l'inscription si disponible
+                if ($inscription && !empty($inscription['niveau'])) {
+                    $niveauDisplay = cleanNiveau($inscription['niveau']);
+                    // Si c'est 2AP, garder 2AP1 ou 2AP2 (ne pas transformer en "2ème Année Préparatoire")
+                    if (strpos($niveauDisplay, 'CI') !== false) {
+                        // Garder CI1, CI2, CI3
+                        if ($filiere && $filiere !== 'Cycle Préparatoire') {
+                            $filiereDisplay = $filiere;
+                        }
+                    }
+                    // Si c'est 2AP, cleanNiveau devrait déjà retourner 2AP1 ou 2AP2
                 }
             }
             
@@ -1113,7 +1193,12 @@ function generatePDF($demande, $validationData = []) {
                 
                 if ($niveauDisplay) {
                     $pdf->SetX(30);
-                    $pdf->Cell(0, 5, 'inscrite en ' . $niveauDisplay, 0, 1, 'L');
+                    // Afficher le niveau avec la filière si c'est un cycle ingénieur
+                    $niveauText = 'inscrite en ' . $niveauDisplay;
+                    if ($filiereDisplay && strpos($niveauDisplay, 'CI') !== false) {
+                        $niveauText .= ' - ' . $filiereDisplay;
+                    }
+                    $pdf->Cell(0, 5, $niveauText, 0, 1, 'L');
                 }
                 
                 // Afficher "a obtenu les notes suivantes:" seulement sur la première page

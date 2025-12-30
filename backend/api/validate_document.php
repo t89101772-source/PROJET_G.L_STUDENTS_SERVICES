@@ -180,12 +180,14 @@ function validateReleveNotes($pdo, $apogeeNumber, $additionalInfo = []) {
     }
 
     // Mode demandé:
-    // - niveau_cible = "Tous" => relevé complet du S1 jusqu'au dernier semestre validé
     // - niveau_cible = un niveau => relevé limité aux semestres validés de CE niveau
-    // Support rétro-compat: si l'ancien front envoie annee_universitaire/semestre, on génère un relevé complet (Tous).
+    // Le niveau est obligatoire et ne peut plus être "Tous"
     $niveauCible = $additionalInfo['niveau_cible'] ?? null;
-    if (empty($niveauCible)) {
-        $niveauCible = 'Tous';
+    if (empty($niveauCible) || $niveauCible === 'Tous') {
+        return [
+            'valid' => false,
+            'error' => 'Veuillez sélectionner un niveau spécifique pour le relevé de notes (2AP1, 2AP2, CI1, CI2 ou CI3).'
+        ];
     }
 
     $ranges = [
@@ -228,31 +230,28 @@ function validateReleveNotes($pdo, $apogeeNumber, $additionalInfo = []) {
     }
 
     $included = [];
-    $mode = 'Tous';
+    $mode = 'Niveau';
 
-    if ($niveauCible === 'Tous') {
-        $maxValidated = max($validatedList);
-        $included = range(1, $maxValidated);
-    } else {
-        if (!isset($ranges[$niveauCible])) {
-            return [
-                'valid' => false,
-                'error' => "Niveau invalide pour le relevé de notes"
-            ];
-        }
-        $mode = 'Niveau';
-        [$minS, $maxS] = $ranges[$niveauCible];
-        foreach ($validatedList as $s) {
-            if ($s >= $minS && $s <= $maxS) $included[] = $s;
-        }
-        sort($included);
-        $included = array_values(array_unique($included));
-        if (empty($included)) {
-            return [
-                'valid' => false,
-                'error' => "Aucun semestre validé trouvé pour le niveau $niveauCible."
-            ];
-        }
+    // Vérifier que le niveau est valide
+    if (!isset($ranges[$niveauCible])) {
+        return [
+            'valid' => false,
+            'error' => "Niveau invalide pour le relevé de notes. Les niveaux valides sont : 2AP1, 2AP2, CI1, CI2, CI3."
+        ];
+    }
+    
+    // Calculer les semestres inclus pour ce niveau
+    [$minS, $maxS] = $ranges[$niveauCible];
+    foreach ($validatedList as $s) {
+        if ($s >= $minS && $s <= $maxS) $included[] = $s;
+    }
+    sort($included);
+    $included = array_values(array_unique($included));
+    if (empty($included)) {
+        return [
+            'valid' => false,
+            'error' => "Aucun semestre validé trouvé pour le niveau $niveauCible."
+        ];
     }
 
     // Vérifier qu'il existe des notes sur les semestres inclus
