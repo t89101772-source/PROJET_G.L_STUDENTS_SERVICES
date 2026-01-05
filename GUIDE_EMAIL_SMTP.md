@@ -33,6 +33,7 @@ Pour des raisons de sécurité, on n’utilise **jamais** le vrai mot de passe G
    - Cliquer sur **Générer**
 5. Google affiche un **mot de passe de 16 caractères** (exemple : `abcd efgh ijkl mnop`)
    - Copier ce mot de passe (sans les espaces)
+   QA<>
    - **Le garder secret** (ne pas l’envoyer sur WhatsApp / Discord, etc.)
 
 ---
