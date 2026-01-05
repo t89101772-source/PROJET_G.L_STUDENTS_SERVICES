@@ -5,7 +5,8 @@ FROM php:8.2-apache
 RUN docker-php-ext-install pdo pdo_mysql mysqli
 
 # Activer mod_rewrite pour Apache
-RUN a2enmod rewrite
+# Activer les modules Apache nécessaires
+RUN a2enmod rewrite headers
 
 # Configurer Apache pour accepter les requêtes CORS
 RUN echo "Header set Access-Control-Allow-Origin \"*\"" >> /etc/apache2/apache2.conf

@@ -13,7 +13,7 @@ RUN npm install
 COPY . .
 
 # Exposer le port Vite
-EXPOSE 5173
+EXPOSE 3000
 
 # Démarrer le serveur de développement avec host 0.0.0.0
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
