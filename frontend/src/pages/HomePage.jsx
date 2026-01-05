@@ -12,7 +12,8 @@ import {
   X,
   Mail,
   AlertCircle,
-  Info
+  Info,
+  LifeBuoy
 } from 'lucide-react'
 import { demandeService, niveauService, anneeService, reclamationService } from '../services/api'
 
@@ -399,6 +400,14 @@ export default function HomePage() {
               >
                 <Info className="w-4 h-4" />
                 <span className="hidden sm:inline">About Us</span>
+              </button>
+
+              <button
+                onClick={() => navigate('/help')}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <LifeBuoy className="w-4 h-4" />
+                <span className="hidden sm:inline">Aide</span>
               </button>
 
               {/* Bouton Admin */}
@@ -1317,6 +1326,9 @@ export default function HomePage() {
                 </button>
                 <button onClick={() => navigate('/about')} className="block text-sm text-gray-600 hover:text-gray-900 transition-colors">
                   About Us
+                </button>
+                <button onClick={() => navigate('/help')} className="block text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                  Aide
                 </button>
               </div>
             </div>
