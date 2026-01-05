@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import LoadingPage from './components/LoadingPage'
 import HomePage from './pages/HomePage'
 import AboutPage from './pages/AboutPage'
+import HelpPage from './pages/HelpPage'
 import AdminLogin from './pages/admin/AdminLogin'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import History from './pages/admin/History'
@@ -54,6 +55,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/about" element={<AboutPage />} />
+      <Route path="/help" element={<HelpPage />} />
       
       {/* Routes Admin */}
       <Route path="/admin/login" element={<AdminLogin />} />
