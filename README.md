@@ -37,15 +37,15 @@ Application web complète pour la gestion des demandes de documents administrati
 - **Authentification** : Context API
 - **Responsive** : Design adaptatif
 
-## 🚀 Installation
+## 🚀 Installationnnnn
 
-### Prérequis
+### Prérequisss
 - PHP 8.0+
 - MySQL 5.7+
 - Node.js 18+
 - Composer
 
-### Backend
+### Backenddd
 
 ```bash
 cd backend
@@ -70,7 +70,7 @@ Démarrer le serveur :
 php -S localhost:8000 router.php
 ```
 
-### Frontend
+### Frontendddd
 
 ```bash
 cd frontend
@@ -80,14 +80,14 @@ npm run dev
 
 L'application sera accessible sur `http://localhost:3000`
 
-## 📊 Base de Données
+## 📊 Base de Donnéesssss
 
 ### Structure ENSA
 - **CPI1, CPI2** : Cycle Préparatoire Intégré
 - **1A, 2A, 3A** : Cycle Ingénieur (avec filières : Génie Info, Génie Mécanique, etc.)
 - **M1, M2** : Master
 
-### Tables principales
+### Tables principalesss
 - `etudiant` : Informations des étudiants
 - `demande` : Demandes de documents
 - `inscription` : Inscriptions par année
@@ -96,7 +96,7 @@ L'application sera accessible sur `http://localhost:3000`
 - `stage` : Stages PFA/PFE
 - `administrateur` : Comptes administrateurs
 
-## 🧪 Tests
+## 🧪 Testssss:
 
 ### Étudiant de test recommandé
 - **Numéro Apogée** : `B67890`
@@ -111,43 +111,43 @@ Cet étudiant permet de tester toutes les fonctionnalités :
 
 Voir `backend/GUIDE_TEST_COMPLET.md` pour les détails.
 
-### Compte Admin
+### Compte Adminnnnn
 - **Login** : `admin@ensa.ma`
 - **Password** : `admin123`
 
-## 📝 Règles de Validation
+## 📝 Règles de Validationnn
 
-### Attestation de Réussite
+### Attestation de Réussiteee
 - ✅ L'étudiant doit avoir un statut "Réussi" pour l'année demandée
 - ❌ Refusée si statut "En cours" ou "Ajourné"
 
-### Convention de Stage
+### Convention de Stageee
 - **PFA (2A)** : Durée 8-12 semaines (2-3 mois)
 - **PFE (3A)** : Durée 16-24 semaines (4-6 mois)
 - ❌ Refusée si l'étudiant n'est pas en 2A ou 3A
 
-### Relevé de Notes
+### Relevé de Notesss
 - ✅ Doit avoir des notes pour l'année/semestre demandé
 - Affiche les modules, notes, coefficients et mentions
 
-## 🔒 Sécurité
+## 🔒 Sécuritéee
 
 - Validation côté serveur pour toutes les demandes
 - Vérification des données (email, Apogée, CIN) avant création
 - QR code sur les PDF pour vérification d'authenticité
 - Protection CORS configurée
 
-## 📦 Technologies
+## 📦 Technologiessss
 
 - **Backend** : PHP 8.4, MySQL, TCPDF
 - **Frontend** : React 18, Vite, Tailwind CSS, Framer Motion
 - **API** : REST avec CORS
 - **PDF** : TCPDF avec QR code
 
-## 👥 Auteurs
+## 👥 Auteursss
 
 Projet développé pour l'ENSA - Système de gestion des services étudiants.
 
-## 📄 Licence
+## 📄 Licenceee
 
 Projet académique - ENSA
