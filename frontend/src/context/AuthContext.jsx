@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { authService } from '../services/api'
+import { getStoredUser, setStoredUser, clearStoredUser } from '../services/storage'
 
 const AuthContext = createContext()
 
@@ -13,9 +14,8 @@ export function AuthProvider({ children }) {
 
   const checkAuth = async () => {
     try {
-      const storedUser = localStorage.getItem('user')
-      if (storedUser) {
-        const userData = JSON.parse(storedUser)
+      const userData = getStoredUser()
+      if (userData) {
         setUser(userData)
       }
     } catch (error) {
@@ -35,7 +35,7 @@ export function AuthProvider({ children }) {
           token: response.token
         }
         setUser(userData)
-        localStorage.setItem('user', JSON.stringify(userData))
+        setStoredUser(userData)
         return { success: true }
       } else {
         return { 
@@ -61,7 +61,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem('user')
+    clearStoredUser()
   }
 
   return (
