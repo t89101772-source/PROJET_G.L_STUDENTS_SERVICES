@@ -1,6 +1,9 @@
 import axios from 'axios'
+import { getStoredUser } from './storage'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const normalizeBaseUrl = (url) => url.replace(/\/+$/, '')
+const API_URL = normalizeBaseUrl(import.meta.env.VITE_API_URL || 'http://localhost:8000/api')
+const API_ORIGIN = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL
 
 const api = axios.create({
   baseURL: API_URL,
@@ -9,27 +12,26 @@ const api = axios.create({
   },
 })
 
-// Intercepteur pour ajouter le token et logger les requêtes
+// Request interceptor for token and dev-only logging
 api.interceptors.request.use((config) => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}')
-  if (user.token) {
+  const user = getStoredUser()
+  if (user?.token) {
     config.headers.Authorization = `Bearer ${user.token}`
   }
-  // Logger les requêtes importantes
-  if (config.url && config.url.includes('send-email-document')) {
-    console.log('📤 REQUÊTE API - send-email-document:', {
+  if (import.meta.env.DEV && config.url && config.url.includes('send-email-document')) {
+    console.log('REQUEST API - send-email-document:', {
       url: config.url,
       method: config.method,
-      data: config.data
+      data: config.data,
     })
   }
   return config
 })
 
-// Intercepteur pour gérer les erreurs de réponse
+// Response interceptor for API errors
 api.interceptors.response.use(
   (response) => {
-    // Si la réponse contient une erreur dans le body, la traiter comme une erreur
+    // Treat API error payloads as failures
     if (response.data && response.data.error && !response.data.success) {
       return Promise.reject({
         response: {
@@ -41,7 +43,7 @@ api.interceptors.response.use(
     return response
   },
   (error) => {
-    // Gérer les erreurs HTTP
+    // Bubble up HTTP errors
     return Promise.reject(error)
   }
 )
@@ -90,9 +92,8 @@ export const demandeService = {
     const url = apogeeNumber 
       ? `/download-document?demande_id=${demandeId}&apogee_number=${apogeeNumber}`
       : `/download-document?demande_id=${demandeId}`
-    // Utiliser l'URL complète avec le port du backend
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
-    const fullUrl = backendUrl.replace('/api', '') + url
+    // Utiliser l'URL complete avec le port du backend
+    const fullUrl = `${normalizeBaseUrl(API_ORIGIN)}${url}`
     window.open(fullUrl, '_blank')
   },
   
